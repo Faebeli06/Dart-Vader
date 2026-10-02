@@ -4,12 +4,34 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
+const kAccent = Color(0xFF2DE2C8); // türkis
+const kViolet = Color(0xFF9B7BFF);
+const kLine = Color(0xFF2A2A2A);
+
 void main() => runApp(MaterialApp(
     title: 'Dart Zähler',
     theme: ThemeData(
-        colorSchemeSeed: Colors.red,
         brightness: Brightness.dark,
-        useMaterial3: true),
+        useMaterial3: true,
+        fontFamily: 'monospace',
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: const ColorScheme.dark(primary: kAccent, secondary: kViolet, surface: Colors.black),
+        appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.black,
+            scrolledUnderElevation: 0,
+            titleTextStyle: TextStyle(fontFamily: 'monospace', fontSize: 16, letterSpacing: 2, color: Colors.white)),
+        bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Color(0xFF0D0D0D)),
+        filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+                backgroundColor: kAccent,
+                foregroundColor: Colors.black,
+                shape: const StadiumBorder(),
+                minimumSize: const Size.fromHeight(52))),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+                shape: const StadiumBorder(),
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: kLine)))),
     home: const SetupPage()));
 
 // ---------- Spiellogik ----------
@@ -83,6 +105,68 @@ class Game {
     darts.removeLast();
     scores[cur] = turnStart - _sum();
   }
+}
+
+// ---------- Checkout-Vorschläge ----------
+final _all = <Dart>[
+  for (var n = 20; n >= 1; n--) Dart(n, 3),
+  for (var n = 20; n >= 1; n--) Dart(n, 2),
+  for (var n = 20; n >= 1; n--) Dart(n, 1),
+  const Dart(25, 2),
+  const Dart(25, 1),
+];
+final _memo = <String, List<Dart>?>{};
+
+int _cost(List<Dart> r, bool dbl) {
+  const pref = [20, 16, 8, 10, 12, 18, 14, 6, 4, 2, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+  var c = 0;
+  for (var i = 0; i < r.length; i++) {
+    final d = r[i];
+    if (i < r.length - 1) {
+      if (d.m == 3 && d.n < 17) c += 10;
+      if (d.m == 2) c += 6;
+    } else if (dbl) {
+      c += d.n == 25 ? 12 : pref.indexOf(d.n);
+    } else {
+      c += d.m == 1 ? 0 : d.m == 2 ? 1 : 3;
+    }
+  }
+  return c;
+}
+
+/// Kürzester Weg auf 0 mit höchstens [left] Darts (bei Double-Out: letzter Dart ein Double).
+List<Dart>? checkout(int rem, bool dbl, int left) {
+  return _memo.putIfAbsent('$rem$dbl$left', () {
+    for (var n = 1; n <= left; n++) {
+      List<Dart>? best;
+      var bc = 1 << 30;
+      void go(int r, List<Dart> acc) {
+        final k = n - acc.length;
+        if (k == 1) {
+          for (final d in _all) {
+            if (d.points == r && (!dbl || d.m == 2)) {
+              final route = [...acc, d];
+              final c = _cost(route, dbl);
+              if (c < bc) {
+                bc = c;
+                best = route;
+              }
+            }
+          }
+          return;
+        }
+        for (final d in _all) {
+          final r2 = r - d.points;
+          if (r2 < (dbl ? 2 : 1) || r2 > 60 * (k - 1)) continue;
+          go(r2, [...acc, d]);
+        }
+      }
+
+      go(rem, []);
+      if (best != null) return best;
+    }
+    return null;
+  });
 }
 
 // ---------- Setup ----------
@@ -310,25 +394,52 @@ class _GameState extends State<GamePage> {
     });
   }
 
-  void _manual() => showModalBottomSheet(
-      context: context,
-      builder: (c) => Padding(
-          padding: const EdgeInsets.all(12),
-          child: AspectRatio(
-              aspectRatio: 1,
-              child: LayoutBuilder(builder: (_, k) {
-                final s = k.maxWidth, R = s / 2 * 0.92;
-                return GestureDetector(
-                    onTapUp: (t) {
-                      Navigator.pop(c);
-                      _add(fromBoard((t.localPosition.dx - s / 2) / R, (t.localPosition.dy - s / 2) / R));
-                    },
-                    child: CustomPaint(painter: BoardPainter(), size: Size(s, s)));
-              }))));
+  void _manual() {
+    var mult = 1;
+    showModalBottomSheet(
+        context: context,
+        builder: (c) => StatefulBuilder(builder: (c, set) {
+              Widget key(String t, VoidCallback f, {bool sel = false}) => Expanded(
+                  child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(54),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              backgroundColor: sel ? kAccent.withOpacity(.18) : null,
+                              side: BorderSide(color: sel ? kAccent : kLine)),
+                          onPressed: f,
+                          child: Text(t, style: const TextStyle(fontSize: 18)))));
+              void pick(Dart d) {
+                Navigator.pop(c);
+                _add(d);
+              }
+
+              return SafeArea(
+                  child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Row(children: [
+                          key('SINGLE', () => set(() => mult = 1), sel: mult == 1),
+                          key('DOUBLE', () => set(() => mult = 2), sel: mult == 2),
+                          key('TRIPLE', () => set(() => mult = 3), sel: mult == 3),
+                        ]),
+                        for (var r = 0; r < 5; r++)
+                          Row(children: [for (var i = 1; i <= 4; i++) key('${r * 4 + i}', () => pick(Dart(r * 4 + i, mult)))]),
+                        Row(children: [
+                          key('25', () => pick(const Dart(25, 1))),
+                          key('BULL', () => pick(const Dart(25, 2))),
+                          key('MISS', () => pick(const Dart(0, 1))),
+                        ]),
+                      ])));
+            }));
+  }
 
   @override
   Widget build(BuildContext c) {
     final cc = ctrl;
+    final rem = g.scores[g.cur];
+    final route = g.winner == null && rem <= (g.dbl ? 170 : 180) ? checkout(rem, g.dbl, 3 - g.darts.length) : null;
     return Scaffold(
       appBar: AppBar(
           title: Text(g.winner != null ? '🏆 ${g.winner} gewinnt!' : 'Dran: ${g.names[g.cur]}'),
@@ -338,21 +449,36 @@ class _GameState extends State<GamePage> {
           ]),
       body: Column(children: [
         SizedBox(
-          height: 76,
+          height: 100,
           child: Row(children: [
             for (var i = 0; i < g.names.length; i++)
               Expanded(
                   child: GestureDetector(
                       onTap: i == g.cur && g.winner == null ? _arm : null,
-                      child: Card(
-                          color: i == g.cur
-                              ? (armed ? Colors.green.shade800 : Theme.of(c).colorScheme.primaryContainer)
-                              : null,
-                          child: Center(
-                              child: Text('${g.names[i]}\n${g.scores[i]}',
-                                  textAlign: TextAlign.center, style: const TextStyle(fontSize: 18)))))),
+                      child: Container(
+                          margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                              color: i == g.cur && armed ? kAccent.withOpacity(.15) : const Color(0xFF0C0C0C),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                  color: i == g.cur ? (armed ? kAccent : kViolet) : kLine,
+                                  width: i == g.cur ? 1.5 : 1)),
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Text(g.names[i].toUpperCase(),
+                                style: const TextStyle(fontSize: 10, letterSpacing: 2, color: Colors.white54)),
+                            Text('${g.scores[i]}',
+                                style: TextStyle(
+                                    fontSize: 36, color: i == g.cur ? Colors.white : Colors.white70)),
+                          ])))),
           ]),
         ),
+        if (route != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text.rich(TextSpan(children: [
+                const TextSpan(text: 'CHECKOUT  ', style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 11)),
+                TextSpan(text: route.map((d) => d.label).join(' · '), style: const TextStyle(color: kViolet, fontSize: 18)),
+              ]))),
         Padding(
             padding: const EdgeInsets.all(8),
             child: Text('${g.darts.map((d) => d.label).join('  ')}\n$info', textAlign: TextAlign.center)),
@@ -398,43 +524,6 @@ class _GameState extends State<GamePage> {
   }
 }
 
-class BoardPainter extends CustomPainter {
-  @override
-  void paint(Canvas c, Size s) {
-    final ctr = s.center(Offset.zero), R = s.width / 2 * 0.92;
-    c.drawCircle(ctr, s.width / 2, Paint()..color = Colors.black);
-    void ring(double a, double b, Color col, int i) {
-      final p = Paint()
-        ..color = col
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = (b - a) * R;
-      c.drawArc(Rect.fromCircle(center: ctr, radius: (a + b) / 2 * R),
-          (-90 - 9 + i * 18) * pi / 180, 18 * pi / 180, false, p);
-    }
-
-    for (var i = 0; i < 20; i++) {
-      final even = i % 2 == 0;
-      final single = even ? const Color(0xFF222222) : const Color(0xFFE8D9B0);
-      final color = even ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
-      ring(0.094, 0.582, single, i);
-      ring(0.582, 0.629, color, i);
-      ring(0.629, 0.953, single, i);
-      ring(0.953, 1.0, color, i);
-      final a = (-90 + i * 18) * pi / 180;
-      final tp = TextPainter(
-          text: TextSpan(text: '${order[i]}', style: const TextStyle(fontSize: 13)),
-          textDirection: TextDirection.ltr)
-        ..layout();
-      tp.paint(c, ctr + Offset(cos(a), sin(a)) * R * 1.04 - Offset(tp.width / 2, tp.height / 2));
-    }
-    c.drawCircle(ctr, 0.094 * R, Paint()..color = const Color(0xFF2E7D32));
-    c.drawCircle(ctr, 0.037 * R, Paint()..color = const Color(0xFFC62828));
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
-}
-
 // ---------- Kamera-Overlay ----------
 class _Overlay extends CustomPainter {
   final List<Offset> pts;
@@ -442,7 +531,7 @@ class _Overlay extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()
-      ..color = Colors.greenAccent
+      ..color = kAccent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
