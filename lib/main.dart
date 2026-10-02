@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
@@ -256,6 +257,67 @@ Offset apply(List<double> h, double x, double y) {
   return Offset((h[0] * x + h[1] * y + h[2]) / k, (h[3] * x + h[4] * y + h[5]) / k);
 }
 
+class Gray {
+  final int w, h, ow, oh; // Größe + Originalgröße
+  final Uint8List d;
+  Gray(this.w, this.h, this.ow, this.oh, this.d);
+}
+
+/// Kantenbild in halber Auflösung (unabhängig von der Helligkeit).
+Gray edges(img.Image im) {
+  const f = 2;
+  final w = im.width ~/ f, h = im.height ~/ f;
+  final g = Uint8List(w * h), e = Uint8List(w * h);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      g[y * w + x] = im.getPixel(x * f, y * f).luminance.toInt();
+    }
+  }
+  for (var y = 0; y < h - 1; y++) {
+    for (var x = 0; x < w - 1; x++) {
+      final v = (g[y * w + x + 1] - g[y * w + x]).abs() + (g[(y + 1) * w + x] - g[y * w + x]).abs();
+      e[y * w + x] = v > 255 ? 255 : v;
+    }
+  }
+  return Gray(w, h, im.width, im.height, e);
+}
+
+/// Wie weit (Originalpixel) hat sich das Bild [cur] gegenüber [ref] verschoben? null = unsicher.
+Offset? align(Gray ref, Gray cur, List<Offset> pts) {
+  var x0 = 1.0, y0 = 1.0, x1 = 0.0, y1 = 0.0;
+  for (final p in pts) {
+    x0 = min(x0, p.dx);
+    x1 = max(x1, p.dx);
+    y0 = min(y0, p.dy);
+    y1 = max(y1, p.dy);
+  }
+  const R = 20, st = 3;
+  final cx = (x0 + x1) / 2 * ref.w, cy = (y0 + y1) / 2 * ref.h;
+  final hw = (x1 - x0) * ref.w * 0.75, hh = (y1 - y0) * ref.h * 0.75;
+  final rx0 = max(R.toDouble(), cx - hw).toInt(), rx1 = min(ref.w - R - 2.0, cx + hw).toInt();
+  final ry0 = max(R.toDouble(), cy - hh).toInt(), ry1 = min(ref.h - R - 2.0, cy + hh).toInt();
+  if (rx1 - rx0 < 40 || ry1 - ry0 < 40) return null;
+  var best = 1 << 60, bx = 0, by = 0;
+  for (var dy = -R; dy <= R; dy++) {
+    for (var dx = -R; dx <= R; dx++) {
+      var sad = 0;
+      for (var y = ry0; y < ry1; y += st) {
+        final ro = y * ref.w, co = (y + dy) * cur.w + dx;
+        for (var x = rx0; x < rx1; x += st) {
+          sad += (ref.d[ro + x] - cur.d[co + x]).abs();
+        }
+      }
+      if (sad < best) {
+        best = sad;
+        bx = dx;
+        by = dy;
+      }
+    }
+  }
+  if (bx.abs() >= R || by.abs() >= R) return null;
+  return Offset(bx * 2.0, by * 2.0);
+}
+
 class Det {
   final Dart dart;
   final Offset tip, board;
@@ -281,23 +343,27 @@ Det? detect(img.Image a, img.Image b) {
   final X0 = max(0, x0.floor()), Y0 = max(0, y0.floor());
   final bw = min(w - 1, x1.ceil()) - X0 + 1, bh = min(h - 1, y1.ceil()) - Y0 + 1;
   if (bw < 50 || bh < 50) return null;
-  final d = List.filled(bw * bh, 0.0);
+  final d = List.filled(bw * bh * 3, 0.0);
   var sum = 0.0;
   for (var y = 0; y < bh; y++) {
     for (var x = 0; x < bw; x++) {
-      final v = (b.getPixel(X0 + x, Y0 + y).luminance - a.getPixel(X0 + x, Y0 + y).luminance).toDouble();
-      d[y * bw + x] = v;
-      sum += v;
+      final pa = a.getPixel(X0 + x, Y0 + y), pb = b.getPixel(X0 + x, Y0 + y);
+      final i = (y * bw + x) * 3;
+      d[i] = (pb.r - pa.r).toDouble();
+      d[i + 1] = (pb.g - pa.g).toDouble();
+      d[i + 2] = (pb.b - pa.b).toDouble();
+      sum += d[i] + d[i + 1] + d[i + 2];
     }
   }
-  final shift = sum / (bw * bh); // globale Helligkeitsänderung ignorieren
+  final shift = sum / (bw * bh * 3); // globale Helligkeitsänderung ignorieren
   const f = 3;
   final gw = (bw + f - 1) ~/ f, gh = (bh + f - 1) ~/ f;
   final cnt = List.filled(gw * gh, 0);
   final cand = <int>[];
   for (var y = 0; y < bh; y++) {
     for (var x = 0; x < bw; x++) {
-      if ((d[y * bw + x] - shift).abs() > 35) {
+      final i = (y * bw + x) * 3;
+      if (((d[i] - shift).abs() + (d[i + 1] - shift).abs() + (d[i + 2] - shift).abs()) / 3 > 22) {
         final p = apply(hm, (X0 + x).toDouble(), (Y0 + y).toDouble());
         if (p.distance < 1.2) {
           cand.add(y * bw + x);
@@ -334,7 +400,7 @@ Det? detect(img.Image a, img.Image b) {
       bestId = id;
     }
   }
-  if (bestN < 40 || bestN > 0.06 * bw * bh) return null; // nichts / Hand im Bild
+  if (bestN < 25 || bestN > 0.06 * bw * bh) return null; // nichts / Hand im Bild
   final pts = <Offset>[];
   for (final i in cand) {
     final x = i % bw, y = i ~/ bw;
@@ -388,6 +454,10 @@ class _GameState extends State<GamePage> {
   Det? pending;
   Offset? tip;
   int? drag;
+  int seen = 0;
+  Gray? refG;
+  List<Offset>? refCalib;
+  bool calDirty = true;
   String info = '';
   Timer? timer;
 
@@ -405,7 +475,7 @@ class _GameState extends State<GamePage> {
       } catch (_) {}
       if (mounted) setState(() => ctrl = cc);
     });
-    timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => _tick());
+    timer = Timer.periodic(const Duration(milliseconds: 900), (_) => _tick());
   }
 
   @override
@@ -451,9 +521,25 @@ class _GameState extends State<GamePage> {
         await ctrl!.setFocusMode(FocusMode.locked);
       } catch (_) {}
       base = await _shot();
+      var note = '';
+      final cur = edges(base!);
+      if (calDirty || refG == null || refCalib == null) {
+        refG = cur; // Referenz für das automatische Nachführen
+        refCalib = List.of(calib);
+        calDirty = false;
+      } else {
+        final sh = align(refG!, cur, refCalib!);
+        if (sh != null) {
+          calib = [for (final p in refCalib!) p + Offset(sh.dx / cur.ow, sh.dy / cur.oh)];
+          note = ' (Scheibe nachgeführt: ${sh.dx.toInt()}/${sh.dy.toInt()} px)';
+        } else {
+          note = ' (Ausrichtung unsicher – ggf. neu kalibrieren)';
+        }
+      }
       pending = null;
+      seen = 0;
       armed = true;
-      info = 'Bereit – ${g.names[g.cur]} wirft';
+      info = 'Bereit – ${g.names[g.cur]} wirft$note';
     } catch (e) {
       info = 'Fehler: $e';
     }
@@ -471,15 +557,18 @@ class _GameState extends State<GamePage> {
       final d = detect(base!, now);
       if (d == null) {
         pending = null;
+        seen = 0;
       } else {
+        seen++;
         if (mounted) {
           setState(() {
             tip = Offset(d.tip.dx / now.width, d.tip.dy / now.height);
             info = 'Blob ${d.area}px → ${d.dart.label}';
           });
         }
-        if (pending != null && (pending!.board - d.board).distance < 0.06) {
+        if (pending != null && ((pending!.board - d.board).distance < 0.12 || seen >= 3)) {
           pending = null;
+          seen = 0;
           base = now;
           _add(d.dart);
         } else {
@@ -496,6 +585,7 @@ class _GameState extends State<GamePage> {
   void _calibTap(Offset p, Size s) {
     if (calib.length >= 4) return;
     setState(() {
+      calDirty = true;
       calib.add(Offset(p.dx / s.width, p.dy / s.height));
       info = calib.length < 4
           ? 'Weiter: ${calibNames[calib.length]}'
@@ -521,6 +611,7 @@ class _GameState extends State<GamePage> {
     final i = drag;
     if (i == null) return;
     setState(() {
+      calDirty = true;
       final o = calib[i];
       calib[i] = Offset((o.dx + delta.dx * 0.5 / s.width).clamp(0.0, 1.0).toDouble(),
           (o.dy + delta.dy * 0.5 / s.height).clamp(0.0, 1.0).toDouble());
@@ -660,6 +751,7 @@ class _GameState extends State<GamePage> {
                 child: OutlinedButton.icon(
                     onPressed: () => setState(() {
                           calib = [];
+                          calDirty = true;
                           armed = false;
                           info = 'Kalibrieren: ${calibNames[0]} antippen';
                         }),
