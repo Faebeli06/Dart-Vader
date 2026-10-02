@@ -256,31 +256,120 @@ Offset apply(List<double> h, double x, double y) {
   return Offset((h[0] * x + h[1] * y + h[2]) / k, (h[3] * x + h[4] * y + h[5]) / k);
 }
 
-/// Findet die Spitze des neuen Darts. Bei schrägem Blick ragt der Dart zur Kamera hin
-/// aus dem Board; die Spitze (Höhe 0) ist der Punkt des veränderten Bereichs, der
-/// in Board-Koordinaten am nächsten zur Kamera liegt ("unten" im Bild = näher an der Kamera).
-Dart? detect(img.Image a, img.Image b) {
+class Det {
+  final Dart dart;
+  final Offset tip, board;
+  final int area;
+  Det(this.dart, this.tip, this.board, this.area);
+}
+
+/// Neuer Dart = größter veränderter Bereich im Board. Die Spitze ist das schmale Ende
+/// (die Flights sind breit) und wird per Homographie auf die Scheibe abgebildet.
+Det? detect(img.Image a, img.Image b) {
   final w = min(a.width, b.width), h = min(a.height, b.height);
   final pix = [for (final o in calib) Offset(o.dx * w, o.dy * h)];
   final hm = homography(pix, boardPts), hb = homography(boardPts, pix);
-  final c = apply(hb, 0, 0);
-  final dn = apply(hm, c.dx, c.dy + 20);
-  final dir = dn.distance < 1e-6 ? const Offset(0, 1) : dn / dn.distance;
-  final pts = <Offset>[];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if ((a.getPixel(x, y).luminance - b.getPixel(x, y).luminance).abs() > 40) {
-        final p = apply(hm, x.toDouble(), y.toDouble());
-        if (p.distance < 1.3) pts.add(p);
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (var i = 0; i < 72; i++) {
+    final t = i * 5 * pi / 180;
+    final p = apply(hb, 1.2 * sin(t), -1.2 * cos(t));
+    x0 = min(x0, p.dx);
+    x1 = max(x1, p.dx);
+    y0 = min(y0, p.dy);
+    y1 = max(y1, p.dy);
+  }
+  final X0 = max(0, x0.floor()), Y0 = max(0, y0.floor());
+  final bw = min(w - 1, x1.ceil()) - X0 + 1, bh = min(h - 1, y1.ceil()) - Y0 + 1;
+  if (bw < 50 || bh < 50) return null;
+  final d = List.filled(bw * bh, 0.0);
+  var sum = 0.0;
+  for (var y = 0; y < bh; y++) {
+    for (var x = 0; x < bw; x++) {
+      final v = (b.getPixel(X0 + x, Y0 + y).luminance - a.getPixel(X0 + x, Y0 + y).luminance).toDouble();
+      d[y * bw + x] = v;
+      sum += v;
+    }
+  }
+  final shift = sum / (bw * bh); // globale Helligkeitsänderung ignorieren
+  const f = 3;
+  final gw = (bw + f - 1) ~/ f, gh = (bh + f - 1) ~/ f;
+  final cnt = List.filled(gw * gh, 0);
+  final cand = <int>[];
+  for (var y = 0; y < bh; y++) {
+    for (var x = 0; x < bw; x++) {
+      if ((d[y * bw + x] - shift).abs() > 35) {
+        final p = apply(hm, (X0 + x).toDouble(), (Y0 + y).toDouble());
+        if (p.distance < 1.2) {
+          cand.add(y * bw + x);
+          cnt[(y ~/ f) * gw + x ~/ f]++;
+        }
       }
     }
   }
-  if (pts.length < 30 || pts.length > 0.05 * w * h) return null; // nichts / Hand im Bild
-  double sc(Offset p) => p.dx * dir.dx + p.dy * dir.dy;
-  pts.sort((p, q) => sc(q).compareTo(sc(p)));
-  final top = pts.take(max(8, pts.length ~/ 20)).toList();
-  final t = top.reduce((p, q) => p + q) / top.length.toDouble();
-  return fromBoard(t.dx, t.dy);
+  final label = List.filled(gw * gh, 0);
+  var id = 0, bestId = 0, bestN = 0;
+  for (var s = 0; s < gw * gh; s++) {
+    if (cnt[s] == 0 || label[s] != 0) continue;
+    id++;
+    var n = 0;
+    final q = [s];
+    label[s] = id;
+    while (q.isNotEmpty) {
+      final c = q.removeLast();
+      n += cnt[c];
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          final nx = c % gw + dx, ny = c ~/ gw + dy;
+          if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+          final ni = ny * gw + nx;
+          if (cnt[ni] > 0 && label[ni] == 0) {
+            label[ni] = id;
+            q.add(ni);
+          }
+        }
+      }
+    }
+    if (n > bestN) {
+      bestN = n;
+      bestId = id;
+    }
+  }
+  if (bestN < 40 || bestN > 0.06 * bw * bh) return null; // nichts / Hand im Bild
+  final pts = <Offset>[];
+  for (final i in cand) {
+    final x = i % bw, y = i ~/ bw;
+    if (label[(y ~/ f) * gw + x ~/ f] == bestId) pts.add(Offset(x + X0.toDouble(), y + Y0.toDouble()));
+  }
+  var mx = 0.0, my = 0.0;
+  for (final p in pts) {
+    mx += p.dx;
+    my += p.dy;
+  }
+  mx /= pts.length;
+  my /= pts.length;
+  var sxx = 0.0, sxy = 0.0, syy = 0.0;
+  for (final p in pts) {
+    final u = p.dx - mx, v = p.dy - my;
+    sxx += u * u;
+    sxy += u * v;
+    syy += v * v;
+  }
+  final th = 0.5 * atan2(2 * sxy, sxx - syy);
+  final ax = cos(th), ay = sin(th);
+  double tt(Offset p) => (p.dx - mx) * ax + (p.dy - my) * ay;
+  pts.sort((p, q) => tt(p).compareTo(tt(q)));
+  final lo = tt(pts.first), hi = tt(pts.last), len = hi - lo;
+  var nLo = 0, nHi = 0;
+  for (final p in pts) {
+    final t = tt(p);
+    if (t < lo + 0.3 * len) nLo++;
+    if (t > hi - 0.3 * len) nHi++;
+  }
+  final k = max(3, pts.length ~/ 25);
+  final end = len < 12 ? pts : (nLo < nHi ? pts.take(k) : pts.skip(pts.length - k)).toList();
+  final tip = end.reduce((p, q) => p + q) / end.length.toDouble();
+  final bp = apply(hm, tip.dx, tip.dy);
+  return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length);
 }
 
 // ---------- Spiel ----------
@@ -296,7 +385,9 @@ class _GameState extends State<GamePage> {
   CameraController? ctrl;
   img.Image? base;
   bool armed = false, auto = true, busy = false;
-  Dart? pending;
+  Det? pending;
+  Offset? tip;
+  int? drag;
   String info = '';
   Timer? timer;
 
@@ -307,8 +398,11 @@ class _GameState extends State<GamePage> {
         ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
         : '${g.names[g.cur]} antippen, um zu starten';
     availableCameras().then((cams) async {
-      final cc = CameraController(cams.first, ResolutionPreset.medium, enableAudio: false);
+      final cc = CameraController(cams.first, ResolutionPreset.veryHigh, enableAudio: false);
       await cc.initialize();
+      try {
+        await cc.setFlashMode(FlashMode.off);
+      } catch (_) {}
       if (mounted) setState(() => ctrl = cc);
     });
     timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => _tick());
@@ -325,7 +419,7 @@ class _GameState extends State<GamePage> {
     final f = await ctrl!.takePicture();
     var im = img.decodeImage(await f.readAsBytes());
     if (im == null) return null;
-    return img.copyResize(img.bakeOrientation(im), width: 640);
+    return img.copyResize(img.bakeOrientation(im), width: 960);
   }
 
   void _add(Dart d) => setState(() {
@@ -349,6 +443,13 @@ class _GameState extends State<GamePage> {
     }
     busy = true;
     try {
+      try {
+        await ctrl!.setExposureMode(ExposureMode.auto);
+        await ctrl!.setFocusMode(FocusMode.auto);
+        await Future.delayed(const Duration(milliseconds: 800));
+        await ctrl!.setExposureMode(ExposureMode.locked);
+        await ctrl!.setFocusMode(FocusMode.locked);
+      } catch (_) {}
       base = await _shot();
       pending = null;
       armed = true;
@@ -360,7 +461,7 @@ class _GameState extends State<GamePage> {
     if (mounted) setState(() {});
   }
 
-  /// Auto-Erkennung: Ergebnis muss in zwei Aufnahmen hintereinander gleich sein (Hand weg, Dart ruhig).
+  /// Auto-Erkennung: Position muss in zwei Aufnahmen hintereinander (fast) gleich sein.
   Future<void> _tick() async {
     if (!auto || !armed || busy || ctrl == null || base == null || g.winner != null) return;
     busy = true;
@@ -370,12 +471,20 @@ class _GameState extends State<GamePage> {
       final d = detect(base!, now);
       if (d == null) {
         pending = null;
-      } else if (pending != null && pending!.label == d.label) {
-        pending = null;
-        base = now;
-        _add(d);
       } else {
-        pending = d;
+        if (mounted) {
+          setState(() {
+            tip = Offset(d.tip.dx / now.width, d.tip.dy / now.height);
+            info = 'Blob ${d.area}px → ${d.dart.label}';
+          });
+        }
+        if (pending != null && (pending!.board - d.board).distance < 0.06) {
+          pending = null;
+          base = now;
+          _add(d.dart);
+        } else {
+          pending = d;
+        }
       }
     } catch (e) {
       info = 'Fehler: $e';
@@ -390,7 +499,31 @@ class _GameState extends State<GamePage> {
       calib.add(Offset(p.dx / s.width, p.dy / s.height));
       info = calib.length < 4
           ? 'Weiter: ${calibNames[calib.length]}'
-          : 'Kalibriert. ${g.names[g.cur]} antippen, um zu starten.';
+          : 'Kalibriert (Punkte lassen sich verschieben). ${g.names[g.cur]} antippen.';
+    });
+  }
+
+  void _panStart(Offset p, Size s) {
+    int? best;
+    var bd = 70.0;
+    for (var i = 0; i < calib.length; i++) {
+      final dd = (Offset(calib[i].dx * s.width, calib[i].dy * s.height) - p).distance;
+      if (dd < bd) {
+        bd = dd;
+        best = i;
+      }
+    }
+    drag = best;
+  }
+
+  /// Feinjustierung: der Punkt bewegt sich nur halb so weit wie der Finger.
+  void _panUpdate(Offset delta, Size s) {
+    final i = drag;
+    if (i == null) return;
+    setState(() {
+      final o = calib[i];
+      calib[i] = Offset((o.dx + delta.dx * 0.5 / s.width).clamp(0.0, 1.0).toDouble(),
+          (o.dy + delta.dy * 0.5 / s.height).clamp(0.0, 1.0).toDouble());
     });
   }
 
@@ -410,15 +543,23 @@ class _GameState extends State<GamePage> {
                               side: BorderSide(color: sel ? kAccent : kLine)),
                           onPressed: f,
                           child: Text(t, style: const TextStyle(fontSize: 18)))));
+              // Menü bleibt offen, bis der Zug zu Ende ist
               void pick(Dart d) {
-                Navigator.pop(c);
                 _add(d);
+                if (g.winner != null || g.darts.isEmpty) {
+                  Navigator.pop(c);
+                } else {
+                  set(() {});
+                }
               }
 
               return SafeArea(
                   child: Padding(
                       padding: const EdgeInsets.all(10),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('${g.names[g.cur].toUpperCase()}  ${g.scores[g.cur]}   ${g.darts.map((d) => d.label).join(' · ')}',
+                            style: const TextStyle(fontSize: 16, color: kViolet)),
+                        const SizedBox(height: 6),
                         Row(children: [
                           key('SINGLE', () => set(() => mult = 1), sel: mult == 1),
                           key('DOUBLE', () => set(() => mult = 2), sel: mult == 2),
@@ -430,6 +571,10 @@ class _GameState extends State<GamePage> {
                           key('25', () => pick(const Dart(25, 1))),
                           key('BULL', () => pick(const Dart(25, 2))),
                           key('MISS', () => pick(const Dart(0, 1))),
+                          key('↶', () {
+                            setState(g.undo);
+                            set(() {});
+                          }),
                         ]),
                       ])));
             }));
@@ -491,9 +636,12 @@ class _GameState extends State<GamePage> {
                         child: LayoutBuilder(
                             builder: (_, k) => GestureDetector(
                                 onTapUp: (t) => _calibTap(t.localPosition, Size(k.maxWidth, k.maxHeight)),
+                                onPanStart: (d) => _panStart(d.localPosition, Size(k.maxWidth, k.maxHeight)),
+                                onPanUpdate: (d) => _panUpdate(d.delta, Size(k.maxWidth, k.maxHeight)),
+                                onPanEnd: (_) => drag = null,
                                 child: Stack(fit: StackFit.expand, children: [
                                   CameraPreview(cc),
-                                  CustomPaint(painter: _Overlay(List.of(calib))),
+                                  CustomPaint(painter: _Overlay(List.of(calib), tip)),
                                 ])))))),
         Padding(
           padding: const EdgeInsets.all(8),
@@ -527,27 +675,48 @@ class _GameState extends State<GamePage> {
 // ---------- Kamera-Overlay ----------
 class _Overlay extends CustomPainter {
   final List<Offset> pts;
-  _Overlay(this.pts);
+  final Offset? tip;
+  _Overlay(this.pts, this.tip);
   @override
   void paint(Canvas c, Size s) {
-    final p = Paint()
+    final thick = Paint()
       ..color = kAccent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
+    final thin = Paint()
+      ..color = kAccent.withOpacity(.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
     Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
     for (final o in pts) {
-      c.drawCircle(sc(o), 5, p);
+      c.drawCircle(sc(o), 7, thick);
     }
-    if (pts.length < 4) return;
-    final hb = homography(boardPts, pts); // Board -> Bild (normiert)
-    for (final r in [1.0, 0.629, 0.582, 0.094]) {
-      final path = Path();
-      for (var i = 0; i <= 72; i++) {
-        final t = i * 5 * pi / 180;
-        final q = sc(apply(hb, r * sin(t), -r * cos(t)));
-        i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+    if (pts.length == 4) {
+      final hb = homography(boardPts, pts); // Board -> Bild (normiert)
+      Offset at(double r, double deg) {
+        final t = deg * pi / 180;
+        return sc(apply(hb, r * sin(t), -r * cos(t)));
       }
-      c.drawPath(path, p);
+
+      for (final r in [1.0, 0.953, 0.629, 0.582, 0.094, 0.037]) {
+        final path = Path();
+        for (var i = 0; i <= 72; i++) {
+          final q = at(r, i * 5.0);
+          i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+        }
+        c.drawPath(path, r == 1.0 ? thick : thin);
+      }
+      for (var k = 0; k < 20; k++) {
+        c.drawLine(at(0.094, 9.0 + 18 * k), at(1.0, 9.0 + 18 * k), thin);
+        final tp = TextPainter(
+            text: TextSpan(text: '${order[k]}', style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            textDirection: TextDirection.ltr)
+          ..layout();
+        tp.paint(c, at(1.1, 18.0 * k) - Offset(tp.width / 2, tp.height / 2));
+      }
+    }
+    if (tip != null) {
+      c.drawCircle(sc(tip!), 6, Paint()..color = kViolet);
     }
   }
 
