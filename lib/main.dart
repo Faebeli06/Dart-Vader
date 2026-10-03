@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 const kAccent = Color(0xFF2DE2C8); // türkis
 const kViolet = Color(0xFF9B7BFF);
 const kLine = Color(0xFF2A2A2A);
+const teamColors = [kAccent, kViolet, Color(0xFFFFB84D), Color(0xFFFF6B8A)];
 
 void main() => runApp(MaterialApp(
     title: 'Dart Zähler',
@@ -45,7 +46,7 @@ class Dart {
   String get label => n == 0
       ? 'Fehl'
       : n == 25
-          ? (m == 2 ? 'Bull' : '25')
+          ? (m == 2 ? 'D-Bull' : 'S-Bull')
           : '${m == 3 ? 'T' : m == 2 ? 'D' : ''}$n';
 }
 
@@ -66,17 +67,22 @@ class Game {
   final List<String> names;
   final int start;
   final bool dbl;
-  late List<int> scores;
+  late List<int> scores, thrown;
+  late List<List<Dart>> last;
   int cur = 0, turnStart;
   List<Dart> darts = [];
   String? winner, msg;
   Game(this.names, this.start, this.dbl) : turnStart = start {
     scores = List.filled(names.length, start);
+    thrown = List.filled(names.length, 0);
+    last = List.generate(names.length, (_) => <Dart>[]);
   }
+  String avg(int i) => thrown[i] == 0 ? '–' : ((start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
   int _sum() => darts.fold<int>(0, (s, d) => s + d.points);
   void add(Dart d) {
     if (winner != null) return;
     msg = null;
+    thrown[cur]++;
     darts.add(d);
     final rem = turnStart - _sum();
     final bust = rem < 0 || (dbl && rem == 1) || (rem == 0 && dbl && d.m != 2);
@@ -95,6 +101,7 @@ class Game {
   }
 
   void _next() {
+    last[cur] = darts;
     cur = (cur + 1) % names.length;
     darts = [];
     turnStart = scores[cur];
@@ -104,6 +111,7 @@ class Game {
     if (darts.isEmpty) return;
     winner = null;
     darts.removeLast();
+    thrown[cur]--;
     scores[cur] = turnStart - _sum();
   }
 }
@@ -180,38 +188,52 @@ class SetupPage extends StatefulWidget {
 class _SetupState extends State<SetupPage> {
   int players = 2, start = 501;
   bool dbl = true;
+  final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
   @override
   Widget build(BuildContext c) => Scaffold(
-        appBar: AppBar(title: const Text('Dart Zähler')),
+        appBar: AppBar(title: const Text('DART ZÄHLER')),
         body: Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Spieler'),
-            SegmentedButton<int>(
-                segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
-                selected: {players},
-                onSelectionChanged: (s) => setState(() => players = s.first)),
-            const SizedBox(height: 20),
-            const Text('Startpunkte'),
-            SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(value: 301, label: Text('301')),
-                  ButtonSegment(value: 501, label: Text('501')),
-                  ButtonSegment(value: 701, label: Text('701'))
-                ],
-                selected: {start},
-                onSelectionChanged: (s) => setState(() => start = s.first)),
-            SwitchListTile(
-                title: const Text('Double-Out'),
-                value: dbl,
-                onChanged: (v) => setState(() => dbl = v)),
-            const Spacer(),
+          child: Column(children: [
+            Expanded(
+                child: ListView(children: [
+              const Text('SPIELER', style: TextStyle(letterSpacing: 2, color: Colors.white54)),
+              const SizedBox(height: 6),
+              SegmentedButton<int>(
+                  segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
+                  selected: {players},
+                  onSelectionChanged: (s) => setState(() => players = s.first)),
+              const SizedBox(height: 16),
+              for (var i = 0; i < players; i++)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                        controller: ctr[i],
+                        decoration: InputDecoration(
+                            labelText: 'Name ${i + 1}',
+                            prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))),
+              const SizedBox(height: 10),
+              const Text('STARTPUNKTE', style: TextStyle(letterSpacing: 2, color: Colors.white54)),
+              const SizedBox(height: 6),
+              SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 301, label: Text('301')),
+                    ButtonSegment(value: 501, label: Text('501')),
+                    ButtonSegment(value: 701, label: Text('701'))
+                  ],
+                  selected: {start},
+                  onSelectionChanged: (s) => setState(() => start = s.first)),
+              SwitchListTile(title: const Text('Double-Out'), value: dbl, onChanged: (v) => setState(() => dbl = v)),
+            ])),
             FilledButton(
                 onPressed: () => Navigator.push(
                     c,
                     MaterialPageRoute(
-                        builder: (_) => GamePage(Game(
-                            [for (var i = 1; i <= players; i++) 'Spieler $i'], start, dbl)))),
+                        builder: (_) => GamePage(Game([
+                              for (var i = 0; i < players; i++)
+                                ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()
+                            ], start, dbl)))),
                 child: const Text('Spiel starten')),
           ]),
         ),
@@ -453,6 +475,9 @@ class _GameState extends State<GamePage> {
   bool armed = false, auto = true, busy = false;
   Det? pending;
   Offset? tip;
+  bool manual = false;
+  int mult = 1;
+  final pc = PageController(initialPage: 1);
   int? drag;
   int seen = 0;
   Gray? refG;
@@ -481,6 +506,7 @@ class _GameState extends State<GamePage> {
   @override
   void dispose() {
     timer?.cancel();
+    pc.dispose();
     ctrl?.dispose();
     super.dispose();
   }
@@ -499,7 +525,7 @@ class _GameState extends State<GamePage> {
         } else if (g.darts.isEmpty) {
           armed = false;
           base = null;
-          info = '${g.msg ?? ''} Darts ziehen, dann ${g.names[g.cur]} antippen.';
+          info = manual ? '' : '${g.msg ?? ''} Darts ziehen, dann ${g.names[g.cur]} antippen.';
         } else {
           info = 'Erkannt: ${d.label}';
         }
@@ -549,7 +575,7 @@ class _GameState extends State<GamePage> {
 
   /// Auto-Erkennung: Position muss in zwei Aufnahmen hintereinander (fast) gleich sein.
   Future<void> _tick() async {
-    if (!auto || !armed || busy || ctrl == null || base == null || g.winner != null) return;
+    if (manual || !auto || !armed || busy || ctrl == null || base == null || g.winner != null) return;
     busy = true;
     try {
       final now = await _shot();
@@ -618,134 +644,149 @@ class _GameState extends State<GamePage> {
     });
   }
 
-  void _manual() {
-    var mult = 1;
-    showModalBottomSheet(
-        context: context,
-        builder: (c) => StatefulBuilder(builder: (c, set) {
-              Widget key(String t, VoidCallback f, {bool sel = false}) => Expanded(
-                  child: Padding(
-                      padding: const EdgeInsets.all(3),
-                      child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(54),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              backgroundColor: sel ? kAccent.withOpacity(.18) : null,
-                              side: BorderSide(color: sel ? kAccent : kLine)),
-                          onPressed: f,
-                          child: Text(t, style: const TextStyle(fontSize: 18)))));
-              // Menü bleibt offen, bis der Zug zu Ende ist
-              void pick(Dart d) {
-                _add(d);
-                if (g.winner != null || g.darts.isEmpty) {
-                  Navigator.pop(c);
-                } else {
-                  set(() {});
-                }
-              }
+  Widget _keypad() {
+    Widget key(String t, VoidCallback f, {bool sel = false}) => Expanded(
+        child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    backgroundColor: sel ? kAccent.withOpacity(.18) : null,
+                    side: BorderSide(color: sel ? kAccent : kLine)),
+                onPressed: f,
+                child: FittedBox(child: Text(t, style: const TextStyle(fontSize: 20))))));
+    void pick(Dart d) {
+      mult = 1; // nach jedem Dart zurück auf Single
+      _add(d);
+    }
 
-              return SafeArea(
-                  child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text('${g.names[g.cur].toUpperCase()}  ${g.scores[g.cur]}   ${g.darts.map((d) => d.label).join(' · ')}',
-                            style: const TextStyle(fontSize: 16, color: kViolet)),
-                        const SizedBox(height: 6),
-                        Row(children: [
-                          key('SINGLE', () => set(() => mult = 1), sel: mult == 1),
-                          key('DOUBLE', () => set(() => mult = 2), sel: mult == 2),
-                          key('TRIPLE', () => set(() => mult = 3), sel: mult == 3),
-                        ]),
-                        for (var r = 0; r < 5; r++)
-                          Row(children: [for (var i = 1; i <= 4; i++) key('${r * 4 + i}', () => pick(Dart(r * 4 + i, mult)))]),
-                        Row(children: [
-                          key('25', () => pick(const Dart(25, 1))),
-                          key('BULL', () => pick(const Dart(25, 2))),
-                          key('MISS', () => pick(const Dart(0, 1))),
-                          key('↶', () {
-                            setState(g.undo);
-                            set(() {});
-                          }),
-                        ]),
-                      ])));
-            }));
+    Widget row(List<Widget> k) =>
+        Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: k));
+    return Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(children: [
+          row([
+            key('SINGLE', () => setState(() => mult = 1), sel: mult == 1),
+            key('DOUBLE', () => setState(() => mult = 2), sel: mult == 2),
+            key('TRIPLE', () => setState(() => mult = 3), sel: mult == 3),
+          ]),
+          for (var r = 0; r < 5; r++)
+            row([for (var i = 1; i <= 4; i++) key('${r * 4 + i}', () => pick(Dart(r * 4 + i, mult)))]),
+          row([
+            key('S-BULL', () => pick(const Dart(25, 1))),
+            key('D-BULL', () => pick(const Dart(25, 2))),
+            key('MISS', () => pick(const Dart(0, 1))),
+            key('↶', () => setState(g.undo)),
+          ]),
+        ]));
   }
 
-  @override
-  Widget build(BuildContext c) {
-    final cc = ctrl;
-    final rem = g.scores[g.cur];
-    final route = g.winner == null && rem <= (g.dbl ? 170 : 180) ? checkout(rem, g.dbl, 3 - g.darts.length) : null;
+  Widget _card(int i) {
+    final col = teamColors[i % teamColors.length];
+    final cur = i == g.cur;
+    final ds = cur ? g.darts : g.last[i];
+    return Expanded(
+        child: GestureDetector(
+            onTap: cur && !manual ? _arm : null,
+            child: Container(
+                margin: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: cur ? col.withOpacity(armed ? .25 : .10) : const Color(0xFF0C0C0C),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: cur ? col : kLine, width: cur ? 2 : 1)),
+                child: Column(children: [
+                  Text(g.names[i].toUpperCase(),
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                      child: Text('${g.scores[i]}',
+                          style: TextStyle(fontSize: 46, color: cur ? Colors.white : Colors.white60))),
+                  Text('Ø ${g.avg(i)}', style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    for (var k = 0; k < 3; k++)
+                      Expanded(
+                          child: Container(
+                              height: 26,
+                              margin: const EdgeInsets.symmetric(horizontal: 2),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8), border: Border.all(color: kLine)),
+                              child: k < ds.length
+                                  ? FittedBox(
+                                      child: Text(ds[k].label,
+                                          style: TextStyle(fontSize: 12, color: cur ? Colors.white : Colors.white54)))
+                                  : null)),
+                  ]),
+                ]))));
+  }
+
+  Widget _win(BuildContext c) {
+    final col = teamColors[g.cur % teamColors.length];
+    Widget btn(String t, VoidCallback f) => Expanded(
+        child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                onPressed: f,
+                child: FittedBox(child: Text(t)))));
     return Scaffold(
-      appBar: AppBar(
-          title: Text(g.winner != null ? '🏆 ${g.winner} gewinnt!' : 'Dran: ${g.names[g.cur]}'),
-          actions: [
-            const Text('Auto'),
-            Switch(value: auto, onChanged: (v) => setState(() => auto = v))
-          ]),
-      body: Column(children: [
-        SizedBox(
-          height: 100,
-          child: Row(children: [
-            for (var i = 0; i < g.names.length; i++)
-              Expanded(
-                  child: GestureDetector(
-                      onTap: i == g.cur && g.winner == null ? _arm : null,
-                      child: Container(
-                          margin: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                              color: i == g.cur && armed ? kAccent.withOpacity(.15) : const Color(0xFF0C0C0C),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                  color: i == g.cur ? (armed ? kAccent : kViolet) : kLine,
-                                  width: i == g.cur ? 1.5 : 1)),
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Text(g.names[i].toUpperCase(),
-                                style: const TextStyle(fontSize: 10, letterSpacing: 2, color: Colors.white54)),
-                            Text('${g.scores[i]}',
-                                style: TextStyle(
-                                    fontSize: 36, color: i == g.cur ? Colors.white : Colors.white70)),
-                          ])))),
-          ]),
-        ),
-        if (route != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text.rich(TextSpan(children: [
-                const TextSpan(text: 'CHECKOUT  ', style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 11)),
-                TextSpan(text: route.map((d) => d.label).join(' · '), style: const TextStyle(color: kViolet, fontSize: 18)),
-              ]))),
-        Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text('${g.darts.map((d) => d.label).join('  ')}\n$info', textAlign: TextAlign.center)),
+        backgroundColor: col,
+        body: SafeArea(
+            child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const Spacer(),
+                  const Text('GEWINNER',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, letterSpacing: 8, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  FittedBox(
+                      child: Text(g.winner!.toUpperCase(),
+                          style: const TextStyle(color: Colors.black, fontSize: 80, fontWeight: FontWeight.bold))),
+                  const SizedBox(height: 28),
+                  for (var i = 0; i < g.names.length; i++)
+                    Text('${g.names[i]}   Ø ${g.avg(i)}   ${g.thrown[i]} Darts',
+                        textAlign: TextAlign.center, style: const TextStyle(color: Colors.black87, fontSize: 16, height: 1.6)),
+                  const Spacer(),
+                  Row(children: [
+                    btn('ZURÜCK', () => setState(g.undo)),
+                    btn('REVANCHE', () => Navigator.pushReplacement(
+                        c, MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl))))),
+                    btn('MENÜ', () => Navigator.pop(c)),
+                  ]),
+                ]))));
+  }
+
+  Widget _cameraPage(CameraController? cc) => Column(children: [
+        Padding(padding: const EdgeInsets.all(8), child: Text(info, textAlign: TextAlign.center)),
         Expanded(
             child: cc == null
                 ? const Center(child: CircularProgressIndicator())
                 : Center(
                     child: AspectRatio(
                         aspectRatio: 1 / cc.value.aspectRatio,
-                        child: LayoutBuilder(
-                            builder: (_, k) => GestureDetector(
-                                onTapUp: (t) => _calibTap(t.localPosition, Size(k.maxWidth, k.maxHeight)),
-                                onPanStart: (d) => _panStart(d.localPosition, Size(k.maxWidth, k.maxHeight)),
-                                onPanUpdate: (d) => _panUpdate(d.delta, Size(k.maxWidth, k.maxHeight)),
-                                onPanEnd: (_) => drag = null,
-                                child: Stack(fit: StackFit.expand, children: [
-                                  CameraPreview(cc),
-                                  CustomPaint(painter: _Overlay(List.of(calib), tip)),
-                                ])))))),
+                        child: LayoutBuilder(builder: (_, k) {
+                          final sz = Size(k.maxWidth, k.maxHeight);
+                          // Listener statt Pan: Punkte ziehen, aber Wischen zwischen den Seiten bleibt möglich
+                          return Listener(
+                              onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
+                              onPointerMove: (e) => _panUpdate(e.delta, sz),
+                              onPointerUp: (_) => setState(() => drag = null),
+                              onPointerCancel: (_) => setState(() => drag = null),
+                              child: GestureDetector(
+                                  onTapUp: (t) => _calibTap(t.localPosition, sz),
+                                  child: Stack(fit: StackFit.expand, children: [
+                                    CameraPreview(cc),
+                                    CustomPaint(painter: _Overlay(List.of(calib), tip)),
+                                  ])));
+                        })))),
         Padding(
           padding: const EdgeInsets.all(8),
           child: Row(children: [
             Expanded(
                 child: OutlinedButton.icon(
                     onPressed: () => setState(g.undo), icon: const Icon(Icons.undo), label: const Text('Undo'))),
-            const SizedBox(width: 8),
-            Expanded(
-                child: OutlinedButton.icon(
-                    onPressed: g.winner == null ? _manual : null,
-                    icon: const Icon(Icons.touch_app),
-                    label: const Text('Manuell'))),
             const SizedBox(width: 8),
             Expanded(
                 child: OutlinedButton.icon(
@@ -759,6 +800,64 @@ class _GameState extends State<GamePage> {
                     label: const Text('Kalib.'))),
           ]),
         ),
+      ]);
+
+  @override
+  Widget build(BuildContext c) {
+    if (g.winner != null) return _win(c);
+    final rem = g.scores[g.cur];
+    final route = rem <= (g.dbl ? 170 : 180) ? checkout(rem, g.dbl, 3 - g.darts.length) : null;
+    Widget pill(int i, String t) {
+      final on = (manual ? 0 : 1) == i;
+      return GestureDetector(
+          onTap: () => pc.animateToPage(i, duration: const Duration(milliseconds: 250), curve: Curves.easeOut),
+          child: Container(
+              margin: const EdgeInsets.all(4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: on ? kAccent.withOpacity(.15) : null,
+                  border: Border.all(color: on ? kAccent : kLine)),
+              child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'), actions: [
+        if (!manual) const Text('Auto'),
+        if (!manual) Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
+      ]),
+      body: Column(children: [
+        SizedBox(
+            height: 180,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (var i = 0; i < g.names.length; i++) _card(i)
+            ])),
+        Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (g.msg != null)
+                const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
+              if (route != null) ...[
+                const Text('CHECKOUT  ', style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 11)),
+                Text(route.map((d) => d.label).join(' · '), style: const TextStyle(color: kViolet, fontSize: 18)),
+              ],
+            ])),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
+        Expanded(
+            child: PageView(
+          controller: pc,
+          physics: drag != null ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+          onPageChanged: (i) => setState(() {
+            manual = i == 0;
+            if (!manual) {
+              armed = false;
+              base = null;
+              pending = null;
+              info = '${g.names[g.cur]} antippen für Referenzbild';
+            }
+          }),
+          children: [_keypad(), _cameraPage(ctrl)],
+        )),
       ]),
     );
   }
