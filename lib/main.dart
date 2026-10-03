@@ -4,41 +4,89 @@ import 'dart:typed_data';
 import 'dart:ui' show PointMode;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
 
-// 90s-Palette (Türkis, Lila, Pink, Gelb) auf Nothing-Schwarz
-const kBg = Color(0xFF09080F);
-const kAccent = Color(0xFF1AE5D0); // türkis
-const kViolet = Color(0xFF9A6BFF);
-const kLine = Color(0xFF2B2838);
-const teamColors = [kAccent, kViolet, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+// Palette: Dunkel = 90s auf Nothing-Schwarz, Hell = Beige mit Rot/Blau/Orange/Gelb. Umschaltung per applyTheme().
+final darkMode = ValueNotifier<bool>(true), vibOn = ValueNotifier<bool>(true), soundOn = ValueNotifier<bool>(true);
+final diagOn = ValueNotifier<bool>(false), autoFit = ValueNotifier<bool>(true);
+String diagWhy = '';
+Color kBg = const Color(0xFF09080F), kCard = const Color(0xFF14121C), kLine = const Color(0xFF2B2838);
+Color kInk = const Color(0xFFF4F2FA), kDim = const Color(0xFF9A97A8), kOnAccent = Colors.black;
+Color kAccent = const Color(0xFF1AE5D0), kViolet = const Color(0xFF9A6BFF);
+List<Color> teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
 
-void main() => runApp(MaterialApp(
-    title: 'Dart Zähler',
-    builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
-    theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        fontFamily: 'monospace',
-        scaffoldBackgroundColor: Colors.transparent,
-        colorScheme: const ColorScheme.dark(primary: kAccent, secondary: kViolet, surface: kBg),
-        appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.transparent,
-            scrolledUnderElevation: 0,
-            titleTextStyle: TextStyle(fontFamily: 'monospace', fontSize: 16, letterSpacing: 2, color: Colors.white)),
-        bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Color(0xFF0D0D0D)),
-        filledButtonTheme: FilledButtonThemeData(
-            style: FilledButton.styleFrom(
-                backgroundColor: kAccent,
-                foregroundColor: Colors.black,
-                shape: const StadiumBorder(),
-                minimumSize: const Size.fromHeight(52))),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(
-                shape: const StadiumBorder(),
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: kLine)))),
-    home: const SetupPage()));
+void applyTheme(bool d) {
+  if (d) {
+    kBg = Color(0xFF09080F); kCard = Color(0xFF14121C); kLine = Color(0xFF2B2838);
+    kInk = Color(0xFFF4F2FA); kDim = Color(0xFF9A97A8); kOnAccent = Colors.black;
+    kAccent = Color(0xFF1AE5D0); kViolet = Color(0xFF9A6BFF);
+    teamColors = [kAccent, kViolet, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+  } else {
+    kBg = Color(0xFFF1E7D3); kCard = Color(0xFFFBF5E6); kLine = Color(0xFFC9BB9C);
+    kInk = Color(0xFF1B1A22); kDim = Color(0xFF6B6558); kOnAccent = Colors.white;
+    kAccent = Color(0xFF2563EB); kViolet = Color(0xFFE63B2E);
+    teamColors = [kAccent, kViolet, Color(0xFFFF8A00), Color(0xFFE0A800)];
+  }
+}
+
+void feedback() {
+  if (vibOn.value) HapticFeedback.mediumImpact();
+  if (soundOn.value) SystemSound.play(SystemSoundType.click);
+}
+
+Future<void> saveCalib() async {
+  final p = await SharedPreferences.getInstance();
+  if (calib.length == 4) {
+    await p.setStringList('calib', [for (final o in calib) '${o.dx},${o.dy}']);
+  } else {
+    await p.remove('calib');
+  }
+}
+
+ThemeData appTheme(bool d) => ThemeData(
+    brightness: d ? Brightness.dark : Brightness.light,
+    useMaterial3: true,
+    fontFamily: 'monospace',
+    scaffoldBackgroundColor: Colors.transparent,
+    colorScheme: (d ? ColorScheme.dark() : ColorScheme.light()).copyWith(primary: kAccent, secondary: kViolet, surface: kBg),
+    appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        foregroundColor: kInk,
+        titleTextStyle: TextStyle(fontFamily: 'monospace', fontSize: 16, letterSpacing: 2, color: kInk)),
+    bottomSheetTheme: BottomSheetThemeData(backgroundColor: kCard),
+    filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+            backgroundColor: kAccent, foregroundColor: kOnAccent, shape: StadiumBorder(), minimumSize: Size.fromHeight(52))),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(shape: StadiumBorder(), foregroundColor: kInk, side: BorderSide(color: kLine))));
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final p = await SharedPreferences.getInstance();
+  darkMode.value = p.getBool('dark') ?? true;
+  vibOn.value = p.getBool('vib') ?? true;
+  soundOn.value = p.getBool('snd') ?? true;
+  diagOn.value = p.getBool('diag') ?? false;
+  autoFit.value = p.getBool('fit') ?? true;
+  final cs = p.getStringList('calib');
+  if (cs != null && cs.length == 4) {
+    calib = [for (final s in cs) Offset(double.parse(s.split(',')[0]), double.parse(s.split(',')[1]))];
+  }
+  runApp(ValueListenableBuilder<bool>(
+      valueListenable: darkMode,
+      builder: (_, d, __) {
+        applyTheme(d);
+        return MaterialApp(
+            title: 'StanDart',
+            debugShowCheckedModeBanner: false,
+            builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
+            theme: appTheme(d),
+            home: const SplashPage());
+      }));
+}
 
 // ---------- Spiellogik ----------
 const order = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
@@ -48,7 +96,7 @@ class Dart {
   const Dart(this.n, this.m);
   int get points => n * m;
   String get label => n == 0
-      ? 'Fehl'
+      ? 'OUT'
       : n == 25
           ? (m == 2 ? 'D-Bull' : 'S-Bull')
           : '${m == 3 ? 'T' : m == 2 ? 'D' : ''}$n';
@@ -76,6 +124,7 @@ class Game {
   int cur = 0, turnStart;
   List<Dart> darts = [];
   String? winner, msg;
+  bool hold = false, held = false; // hold: Zugende erst nach Bestätigung
   Game(this.names, this.start, this.dbl) : turnStart = start {
     scores = List.filled(names.length, start);
     thrown = List.filled(names.length, 0);
@@ -84,7 +133,8 @@ class Game {
   String avg(int i) => thrown[i] == 0 ? '–' : ((start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
   int _sum() => darts.fold<int>(0, (s, d) => s + d.points);
   void add(Dart d) {
-    if (winner != null) return;
+    if (winner != null || held) return;
+    _save();
     msg = null;
     thrown[cur]++;
     darts.add(d);
@@ -93,7 +143,11 @@ class Game {
     if (bust) {
       scores[cur] = turnStart;
       msg = 'Bust!';
-      _next();
+      if (hold) {
+        held = true;
+      } else {
+        _next();
+      }
       return;
     }
     scores[cur] = rem;
@@ -101,7 +155,13 @@ class Game {
       winner = names[cur];
       return;
     }
-    if (darts.length == 3) _next();
+    if (darts.length == 3) {
+      if (hold) {
+        held = true;
+      } else {
+        _next();
+      }
+    }
   }
 
   void _next() {
@@ -111,12 +171,50 @@ class Game {
     turnStart = scores[cur];
   }
 
+  final hist = <List<Object?>>[];
+  void _save() => hist.add([
+        List<int>.of(scores),
+        List<int>.of(thrown),
+        [for (final l in last) List<Dart>.of(l)],
+        cur,
+        turnStart,
+        List<Dart>.of(darts),
+        winner,
+        msg,
+        held
+      ]);
+
+  void confirmTurn() {
+    if (held) {
+      held = false;
+      _next();
+    }
+  }
+
+  void replace(int k, Dart d) {
+    final ds = List<Dart>.of(darts);
+    ds[k] = d;
+    for (var i = ds.length - k; i > 0; i--) {
+      undo();
+    }
+    for (final x in ds.skip(k)) {
+      add(x);
+    }
+  }
+
+  /// Nimmt den letzten Dart zurück, auch über den Spielerwechsel hinweg.
   void undo() {
-    if (darts.isEmpty) return;
-    winner = null;
-    darts.removeLast();
-    thrown[cur]--;
-    scores[cur] = turnStart - _sum();
+    if (hist.isEmpty) return;
+    final h = hist.removeLast();
+    scores = h[0] as List<int>;
+    thrown = h[1] as List<int>;
+    last = h[2] as List<List<Dart>>;
+    cur = h[3] as int;
+    turnStart = h[4] as int;
+    darts = h[5] as List<Dart>;
+    winner = h[6] as String?;
+    msg = h[7] as String?;
+    held = h[8] as bool;
   }
 }
 
@@ -193,15 +291,103 @@ class _SetupState extends State<SetupPage> {
   int players = 2, start = 501;
   bool dbl = true;
   final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
+
   @override
-  Widget build(BuildContext c) => Scaffold(
-        appBar: AppBar(title: const Text('DART ZÄHLER')),
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (!mounted) return;
+      final n = p.getStringList('names');
+      setState(() {
+        players = p.getInt('players') ?? players;
+        start = p.getInt('start') ?? start;
+        dbl = p.getBool('dbl') ?? dbl;
+        if (n != null) {
+          for (var i = 0; i < n.length && i < 4; i++) {
+            ctr[i].text = n[i];
+          }
+        }
+      });
+    });
+  }
+
+  Future<void> _saveSetup() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('players', players);
+    await p.setInt('start', start);
+    await p.setBool('dbl', dbl);
+    await p.setStringList('names', [for (final t in ctr) t.text]);
+  }
+
+  void _settings(BuildContext c) => showModalBottomSheet(
+      context: c,
+      builder: (c) => StatefulBuilder(
+          builder: (c, set) => SafeArea(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                SwitchListTile(
+                    title: const Text('Helles Design'),
+                    value: !darkMode.value,
+                    onChanged: (v) async {
+                      darkMode.value = !v;
+                      set(() {});
+                      (await SharedPreferences.getInstance()).setBool('dark', !v);
+                    }),
+                SwitchListTile(
+                    title: const Text('Vibration'),
+                    value: vibOn.value,
+                    onChanged: (v) async {
+                      vibOn.value = v;
+                      set(() {});
+                      (await SharedPreferences.getInstance()).setBool('vib', v);
+                    }),
+                SwitchListTile(
+                    title: const Text('Ton'),
+                    value: soundOn.value,
+                    onChanged: (v) async {
+                      soundOn.value = v;
+                      set(() {});
+                      (await SharedPreferences.getInstance()).setBool('snd', v);
+                    }),
+                SwitchListTile(
+                    title: const Text('Auto-Feinabgleich der Scheibe'),
+                    value: autoFit.value,
+                    onChanged: (v) async {
+                      autoFit.value = v;
+                      set(() {});
+                      (await SharedPreferences.getInstance()).setBool('fit', v);
+                    }),
+                SwitchListTile(
+                    title: const Text('Diagnose-Modus'),
+                    subtitle: const Text('zeigt erkannte Flecken und Gründe'),
+                    value: diagOn.value,
+                    onChanged: (v) async {
+                      diagOn.value = v;
+                      set(() {});
+                      (await SharedPreferences.getInstance()).setBool('diag', v);
+                    }),
+                ListTile(
+                    leading: const Icon(Icons.crop_free),
+                    title: const Text('Kalibrierung zurücksetzen'),
+                    onTap: () {
+                      calib = [];
+                      saveCalib();
+                      Navigator.pop(c);
+                    }),
+              ]))));
+
+  @override
+  Widget build(BuildContext c) => ValueListenableBuilder<bool>(
+      valueListenable: darkMode,
+      builder: (c, _, __) => Scaffold(
+        appBar: AppBar(title: const Text('STANDART'), actions: [
+          IconButton(icon: const Icon(Icons.settings), onPressed: () => _settings(c))
+        ]),
         body: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
             Expanded(
                 child: ListView(children: [
-              const Text('SPIELER', style: TextStyle(letterSpacing: 2, color: Colors.white54)),
+              Text('SPIELER', style: TextStyle(letterSpacing: 2, color: kDim)),
               const SizedBox(height: 6),
               SegmentedButton<int>(
                   segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
@@ -218,7 +404,7 @@ class _SetupState extends State<SetupPage> {
                             prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))),
               const SizedBox(height: 10),
-              const Text('STARTPUNKTE', style: TextStyle(letterSpacing: 2, color: Colors.white54)),
+              Text('STARTPUNKTE', style: TextStyle(letterSpacing: 2, color: kDim)),
               const SizedBox(height: 6),
               SegmentedButton<int>(
                   segments: const [
@@ -231,17 +417,20 @@ class _SetupState extends State<SetupPage> {
               SwitchListTile(title: const Text('Double-Out'), value: dbl, onChanged: (v) => setState(() => dbl = v)),
             ])),
             FilledButton(
-                onPressed: () => Navigator.push(
+                onPressed: () {
+                  _saveSetup();
+                  Navigator.push(
                     c,
                     MaterialPageRoute(
                         builder: (_) => GamePage(Game([
                               for (var i = 0; i < players; i++)
                                 ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()
-                            ], start, dbl)))),
+                            ], start, dbl))));
+                },
                 child: const Text('Spiel starten')),
           ]),
         ),
-      );
+      ));
 }
 
 // ---------- Kalibrierung / Perspektive ----------
@@ -344,11 +533,86 @@ Offset? align(Gray ref, Gray cur, List<Offset> pts) {
   return Offset(bx * 2.0, by * 2.0);
 }
 
+/// Wackel-tolerant: kleinster Unterschied zu Pixeln im Umkreis von 2 px im Referenzbild.
+double _wob(Uint8List a, Uint8List b, int w, int h, int x, int y, double shift) {
+  final i = (y * w + x) * 3;
+  var best = 1e9;
+  for (var oy = -2; oy <= 2; oy += 2) {
+    final yy = y + oy;
+    if (yy < 0 || yy >= h) continue;
+    for (var ox = -2; ox <= 2; ox += 2) {
+      final xx = x + ox;
+      if (xx < 0 || xx >= w) continue;
+      final j = (yy * w + xx) * 3;
+      final d = ((b[i] - shift - a[j]).abs() + (b[i + 1] - shift - a[j + 1]).abs() + (b[i + 2] - shift - a[j + 2]).abs()) / 3;
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+/// Mittlere Helligkeitsänderung zwischen zwei Bildern (Bewegung im Bild?)
+double motion(img.Image a, img.Image b) {
+  var s = 0.0, n = 0;
+  for (var y = 0; y < a.height && y < b.height; y += 12) {
+    for (var x = 0; x < a.width && x < b.width; x += 12) {
+      s += (a.getPixel(x, y).luminance - b.getPixel(x, y).luminance).abs();
+      n++;
+    }
+  }
+  return s / n;
+}
+
+/// Feinabgleich: die 4 Punkte werden in kleinen Schritten (max. 4 px) verschoben, bis die
+/// gezeichneten Ringe am besten auf starken Kanten liegen. Nur übernommen, wenn es klar besser wird.
+List<Offset> refineCalib(Gray g, List<Offset> start) {
+  double score(List<Offset> p) {
+    final hb = homography(boardPts, p);
+    var sum = 0.0;
+    for (final r in [1.0, 0.953, 0.629, 0.582]) {
+      for (var i = 0; i < 90; i++) {
+        final t = i * 4 * pi / 180;
+        final q = apply(hb, r * sin(t), -r * cos(t));
+        final x = (q.dx * g.w).round(), y = (q.dy * g.h).round();
+        if (x < 1 || y < 1 || x >= g.w - 1 || y >= g.h - 1) continue;
+        sum += g.d[y * g.w + x];
+      }
+    }
+    return sum;
+  }
+
+  var best = List<Offset>.of(start);
+  var bs = score(best);
+  final s0 = bs;
+  for (var iter = 0; iter < 12; iter++) {
+    var improved = false;
+    for (var i = 0; i < 4; i++) {
+      for (final dx in [-1, 0, 1]) {
+        for (final dy in [-1, 0, 1]) {
+          if (dx == 0 && dy == 0) continue;
+          final cand = List<Offset>.of(best);
+          cand[i] = Offset(cand[i].dx + dx / g.w, cand[i].dy + dy / g.h);
+          if ((cand[i].dx - start[i].dx).abs() * g.w > 4 || (cand[i].dy - start[i].dy).abs() * g.h > 4) continue;
+          final sc = score(cand);
+          if (sc > bs) {
+            bs = sc;
+            best = cand;
+            improved = true;
+          }
+        }
+      }
+    }
+    if (!improved) break;
+  }
+  return bs > s0 * 1.03 ? best : start;
+}
+
 class Det {
   final Dart dart;
   final Offset tip, board;
   final int area;
-  Det(this.dart, this.tip, this.board, this.area);
+  final List<Offset> blob;
+  Det(this.dart, this.tip, this.board, this.area, this.blob);
 }
 
 /// Neuer Dart = größter veränderter Bereich im Board. Die Spitze ist das schmale Ende
@@ -368,28 +632,34 @@ Det? detect(img.Image a, img.Image b) {
   }
   final X0 = max(0, x0.floor()), Y0 = max(0, y0.floor());
   final bw = min(w - 1, x1.ceil()) - X0 + 1, bh = min(h - 1, y1.ceil()) - Y0 + 1;
-  if (bw < 50 || bh < 50) return null;
-  final d = List.filled(bw * bh * 3, 0.0);
-  var sum = 0.0;
+  if (bw < 50 || bh < 50) {
+    diagWhy = 'Scheibenbereich zu klein';
+    return null;
+  }
+  final ra = Uint8List(bw * bh * 3), rb = Uint8List(bw * bh * 3);
+  var sa = 0.0, sb = 0.0;
   for (var y = 0; y < bh; y++) {
     for (var x = 0; x < bw; x++) {
       final pa = a.getPixel(X0 + x, Y0 + y), pb = b.getPixel(X0 + x, Y0 + y);
       final i = (y * bw + x) * 3;
-      d[i] = (pb.r - pa.r).toDouble();
-      d[i + 1] = (pb.g - pa.g).toDouble();
-      d[i + 2] = (pb.b - pa.b).toDouble();
-      sum += d[i] + d[i + 1] + d[i + 2];
+      ra[i] = pa.r.toInt();
+      ra[i + 1] = pa.g.toInt();
+      ra[i + 2] = pa.b.toInt();
+      rb[i] = pb.r.toInt();
+      rb[i + 1] = pb.g.toInt();
+      rb[i + 2] = pb.b.toInt();
+      sa += ra[i] + ra[i + 1] + ra[i + 2];
+      sb += rb[i] + rb[i + 1] + rb[i + 2];
     }
   }
-  final shift = sum / (bw * bh * 3); // globale Helligkeitsänderung ignorieren
+  final shift = (sb - sa) / (bw * bh * 3); // globale Helligkeitsänderung ignorieren
   const f = 3;
   final gw = (bw + f - 1) ~/ f, gh = (bh + f - 1) ~/ f;
   final cnt = List.filled(gw * gh, 0);
   final cand = <int>[];
   for (var y = 0; y < bh; y++) {
     for (var x = 0; x < bw; x++) {
-      final i = (y * bw + x) * 3;
-      if (((d[i] - shift).abs() + (d[i + 1] - shift).abs() + (d[i + 2] - shift).abs()) / 3 > 22) {
+      if (_wob(ra, rb, bw, bh, x, y, shift) > 24) {
         final p = apply(hm, (X0 + x).toDouble(), (Y0 + y).toDouble());
         if (p.distance < 1.2) {
           cand.add(y * bw + x);
@@ -426,7 +696,10 @@ Det? detect(img.Image a, img.Image b) {
       bestId = id;
     }
   }
-  if (bestN < 25 || bestN > 0.06 * bw * bh) return null; // nichts / Hand im Bild
+  if (bestN < 25 || bestN > 0.06 * bw * bh) {
+    diagWhy = bestN < 25 ? 'nichts Neues ($bestN px)' : 'Fleck zu groß – Hand? ($bestN px)';
+    return null;
+  }
   final pts = <Offset>[];
   for (final i in cand) {
     final x = i % bw, y = i ~/ bw;
@@ -451,6 +724,10 @@ Det? detect(img.Image a, img.Image b) {
   double tt(Offset p) => (p.dx - mx) * ax + (p.dy - my) * ay;
   pts.sort((p, q) => tt(p).compareTo(tt(q)));
   final lo = tt(pts.first), hi = tt(pts.last), len = hi - lo;
+  if (len > 0.6 * (bw / 2.4)) {
+    diagWhy = 'Fleck zu lang (${len.toInt()} px) – Ringkante/Hand?';
+    return null;
+  }
   var nLo = 0, nHi = 0;
   for (final p in pts) {
     final t = tt(p);
@@ -461,7 +738,8 @@ Det? detect(img.Image a, img.Image b) {
   final end = len < 12 ? pts : (nLo < nHi ? pts.take(k) : pts.skip(pts.length - k)).toList();
   final tip = end.reduce((p, q) => p + q) / end.length.toDouble();
   final bp = apply(hm, tip.dx, tip.dy);
-  return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length);
+  return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length,
+      [for (var i = 0; i < pts.length; i += max(1, pts.length ~/ 300)) pts[i]]);
 }
 
 // ---------- Spiel ----------
@@ -479,6 +757,9 @@ class _GameState extends State<GamePage> {
   bool armed = false, auto = true, busy = false;
   Det? pending;
   Offset? tip;
+  List<Offset> blob = [];
+  bool locked = false;
+  img.Image? prev;
   bool manual = false;
   int mult = 1;
   final pc = PageController(initialPage: 1);
@@ -496,6 +777,7 @@ class _GameState extends State<GamePage> {
     info = calib.length < 4
         ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
         : '${g.names[g.cur]} antippen, um zu starten';
+    g.hold = true;
     availableCameras().then((cams) async {
       final cc = CameraController(cams.first, ResolutionPreset.veryHigh, enableAudio: false);
       await cc.initialize();
@@ -522,18 +804,25 @@ class _GameState extends State<GamePage> {
     return img.copyResize(img.bakeOrientation(im), width: 960);
   }
 
-  void _add(Dart d) => setState(() {
-        g.add(d);
-        if (g.winner != null) {
-          info = 'Gewonnen!';
-        } else if (g.darts.isEmpty) {
-          armed = false;
-          base = null;
-          info = manual ? '' : '${g.msg ?? ''} Darts ziehen, dann ${g.names[g.cur]} antippen.';
-        } else {
-          info = 'Erkannt: ${d.label}';
-        }
-      });
+  void _add(Dart d) {
+    feedback();
+    setState(() {
+      g.add(d);
+      if (g.winner != null) {
+        info = 'Gewonnen!';
+      } else if (g.held) {
+        armed = false;
+        base = null;
+        info = 'Zug beendet. Darts antippen = ändern. Darts ziehen, dann ${g.names[(g.cur + 1) % g.names.length]} antippen.';
+      } else if (g.darts.isEmpty) {
+        armed = false;
+        base = null;
+        info = manual ? '' : '${g.msg ?? ''} Darts ziehen, dann ${g.names[g.cur]} antippen.';
+      } else {
+        info = 'Erkannt: ${d.label}';
+      }
+    });
+  }
 
   Future<void> _arm() async {
     if (ctrl == null || busy) return;
@@ -543,17 +832,29 @@ class _GameState extends State<GamePage> {
     }
     busy = true;
     try {
-      try {
-        await ctrl!.setExposureMode(ExposureMode.auto);
-        await ctrl!.setFocusMode(FocusMode.auto);
-        await Future.delayed(const Duration(milliseconds: 800));
-        await ctrl!.setExposureMode(ExposureMode.locked);
-        await ctrl!.setFocusMode(FocusMode.locked);
-      } catch (_) {}
+      if (!locked) {
+        // Fokus/Belichtung nur einmal sperren, danach kein Warten mehr beim Zugwechsel
+        try {
+          await ctrl!.setExposureMode(ExposureMode.auto);
+          await ctrl!.setFocusMode(FocusMode.auto);
+          await Future.delayed(const Duration(milliseconds: 800));
+          await ctrl!.setExposureMode(ExposureMode.locked);
+          await ctrl!.setFocusMode(FocusMode.locked);
+        } catch (_) {}
+        locked = true;
+      }
       base = await _shot();
       var note = '';
       final cur = edges(base!);
       if (calDirty || refG == null || refCalib == null) {
+        if (autoFit.value) {
+          final r = refineCalib(cur, calib);
+          if (!identical(r, calib)) {
+            calib = r;
+            note = ' (Scheibe fein justiert)';
+            saveCalib();
+          }
+        }
         refG = cur; // Referenz für das automatische Nachführen
         refCalib = List.of(calib);
         calDirty = false;
@@ -561,15 +862,18 @@ class _GameState extends State<GamePage> {
         final sh = align(refG!, cur, refCalib!);
         if (sh != null) {
           calib = [for (final p in refCalib!) p + Offset(sh.dx / cur.ow, sh.dy / cur.oh)];
+          if (autoFit.value) calib = refineCalib(cur, calib);
           note = ' (Scheibe nachgeführt: ${sh.dx.toInt()}/${sh.dy.toInt()} px)';
         } else {
           note = ' (Ausrichtung unsicher – ggf. neu kalibrieren)';
         }
       }
       pending = null;
+      prev = null;
       seen = 0;
       armed = true;
       info = 'Bereit – ${g.names[g.cur]} wirft$note';
+      feedback();
     } catch (e) {
       info = 'Fehler: $e';
     }
@@ -584,19 +888,33 @@ class _GameState extends State<GamePage> {
     try {
       final now = await _shot();
       if (now == null) return;
+      final moving = prev != null && motion(prev!, now) > 3; // Hand/Dart noch in Bewegung
+      prev = now;
+      if (moving) {
+        pending = null;
+        seen = 0;
+        return;
+      }
       final d = detect(base!, now);
       if (d == null) {
         pending = null;
         seen = 0;
+        if (diagOn.value && mounted) {
+          setState(() {
+            info = 'Kein Dart: $diagWhy';
+            blob = [];
+          });
+        }
       } else {
         seen++;
         if (mounted) {
           setState(() {
             tip = Offset(d.tip.dx / now.width, d.tip.dy / now.height);
+            blob = [for (final o in d.blob) Offset(o.dx / now.width, o.dy / now.height)];
             info = 'Blob ${d.area}px → ${d.dart.label}';
           });
         }
-        if (pending != null && ((pending!.board - d.board).distance < 0.12 || seen >= 3)) {
+        if (pending != null && (pending!.board - d.board).distance < 0.10) {
           pending = null;
           seen = 0;
           base = now;
@@ -620,6 +938,7 @@ class _GameState extends State<GamePage> {
       info = calib.length < 4
           ? 'Weiter: ${calibNames[calib.length]}'
           : 'Kalibriert (Punkte lassen sich verschieben). ${g.names[g.cur]} antippen.';
+      if (calib.length == 4) saveCalib();
     });
   }
 
@@ -648,82 +967,117 @@ class _GameState extends State<GamePage> {
     });
   }
 
-  Widget _keypad() {
+  Widget _keys(void Function(Dart) onPick, void Function(VoidCallback) refresh, String lastLabel, VoidCallback onLast) {
     Widget key(String t, VoidCallback f, {bool sel = false}) => Expanded(
         child: Padding(
             padding: const EdgeInsets.all(3),
             child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    foregroundColor: sel ? Colors.black : Colors.white,
+                    foregroundColor: sel ? kOnAccent : kInk,
                     backgroundColor: sel ? kAccent : null,
                     side: BorderSide(color: sel ? kAccent : kLine, width: 1.5)),
                 onPressed: f,
                 child: FittedBox(child: Text(t, style: const TextStyle(fontSize: 20))))));
-    void pick(Dart d) {
-      mult = 1; // nach jedem Dart zurück auf Single
-      _add(d);
-    }
-
-    Widget row(List<Widget> k) =>
-        Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: k));
+    Widget row(List<Widget> k) => Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: k));
     return Padding(
         padding: const EdgeInsets.all(8),
         child: Column(children: [
           row([
-            key('SINGLE', () => setState(() => mult = 1), sel: mult == 1),
-            key('DOUBLE', () => setState(() => mult = 2), sel: mult == 2),
-            key('TRIPLE', () => setState(() => mult = 3), sel: mult == 3),
+            key('SINGLE', () => refresh(() => mult = 1), sel: mult == 1),
+            key('DOUBLE', () => refresh(() => mult = 2), sel: mult == 2),
+            key('TRIPLE', () => refresh(() => mult = 3), sel: mult == 3),
           ]),
           for (var r = 0; r < 5; r++)
-            row([for (var i = 1; i <= 4; i++) key('${r * 4 + i}', () => pick(Dart(r * 4 + i, mult)))]),
+            row([for (var i = 1; i <= 4; i++) key('${r * 4 + i}', () => onPick(Dart(r * 4 + i, mult)))]),
           row([
-            key('S-BULL', () => pick(const Dart(25, 1))),
-            key('D-BULL', () => pick(const Dart(25, 2))),
-            key('MISS', () => pick(const Dart(0, 1))),
-            key('↶', () => setState(g.undo)),
+            key('S-BULL', () => onPick(const Dart(25, 1))),
+            key('D-BULL', () => onPick(const Dart(25, 2))),
+            key('OUT', () => onPick(const Dart(0, 1))),
+            key(lastLabel, onLast),
           ]),
         ]));
   }
+
+  void _edit(int k) => showModalBottomSheet(
+      context: context,
+      builder: (c) => StatefulBuilder(
+          builder: (c, set) => SizedBox(
+              height: 430,
+              child: Column(children: [
+                Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Text('DART ${k + 1} ÄNDERN (jetzt ${g.darts[k].label})', style: TextStyle(color: kViolet))),
+                Expanded(
+                    child: _keys((d) {
+                  Navigator.pop(c);
+                  mult = 1;
+                  setState(() => g.replace(k, d));
+                }, set, '✕', () => Navigator.pop(c))),
+              ]))));
+
+  void _tips() => showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+              title: const Text('TIPPS FÜR DIE KAMERA'),
+              content: const SingleChildScrollView(
+                  child: Text('• Winkel: etwa 20–35° seitlich zur Scheibe, auf Höhe der Scheibenmitte. So sieht man die Darts von der Seite statt von hinten oder von vorn.\n'
+                      '• Handy fest aufstellen und nicht berühren. Das Board muss an der Wand fest sein, ein Wackeln beim Treffer stört die Erkennung am meisten.\n'
+                      '• Gleichmäßig von vorn beleuchten, kein Gegenlicht, keine Schatten vom Werfer.\n'
+                      '• Alle vier Kalibrierpunkte genau auf den Außenrand des Doppelrings setzen. Sie lassen sich ziehen.\n'
+                      '• Nach dem Wurf Hand und Dart kurz ruhig lassen, bis der Dart erkannt ist.\n'
+                      '• Zugende: Darts prüfen (antippen = ändern), Darts ziehen, dann den nächsten Spieler antippen.')),
+              actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))]));
 
   Widget _card(int i) {
     final col = teamColors[i % teamColors.length];
     final cur = i == g.cur;
     final ds = cur ? g.darts : g.last[i];
+    final nextI = (g.cur + 1) % g.names.length;
+    final canEdit = cur && g.held && !manual;
     return Expanded(
         child: GestureDetector(
-            onTap: cur && !manual ? _arm : null,
+            onTap: () {
+              if (manual || g.winner != null) return;
+              if (g.held) {
+                if (i == nextI) {
+                  setState(g.confirmTurn);
+                  _arm();
+                }
+              } else if (cur) {
+                _arm();
+              }
+            },
             child: Container(
                 margin: const EdgeInsets.fromLTRB(5, 5, 9, 9),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color: cur
-                        ? Color.alphaBlend(col.withOpacity(armed ? .22 : .08), const Color(0xFF14121C))
-                        : const Color(0xFF0F0D16),
+                    color: kCard,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: cur ? col : kLine, width: cur ? 2 : 1.5),
+                    border: Border.all(color: cur || (g.held && i == nextI) ? col : kLine, width: cur ? 2 : 1.5),
                     boxShadow: cur ? [BoxShadow(color: col, offset: const Offset(4, 4))] : null),
                 child: Column(children: [
-                  Text(g.names[i].toUpperCase(),
+                  Text('${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
                   const SizedBox(height: 4),
-                  FittedBox(child: DotNum('${g.scores[i]}', cur ? Colors.white : Colors.white54)),
-                  Text('Ø ${g.avg(i)}', style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                  FittedBox(child: DotNum('${g.scores[i]}', kInk)),
+                  Text('Ø ${g.avg(i)}', style: TextStyle(fontSize: 12, color: kDim)),
                   const SizedBox(height: 8),
                   Row(children: [
                     for (var k = 0; k < 3; k++)
                       Expanded(
-                          child: Container(
-                              height: 26,
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8), border: Border.all(color: kLine)),
-                              child: k < ds.length
-                                  ? FittedBox(
-                                      child: Text(ds[k].label,
-                                          style: TextStyle(fontSize: 12, color: cur ? Colors.white : Colors.white54)))
-                                  : null)),
+                          child: GestureDetector(
+                              onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                              child: Container(
+                                  height: 26,
+                                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                                  child: k < ds.length
+                                      ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk)))
+                                      : null))),
                   ]),
                 ]))));
   }
@@ -749,13 +1103,16 @@ class _GameState extends State<GamePage> {
                           return Listener(
                               onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
                               onPointerMove: (e) => _panUpdate(e.delta, sz),
-                              onPointerUp: (_) => setState(() => drag = null),
+                              onPointerUp: (_) {
+                                if (drag != null) saveCalib();
+                                setState(() => drag = null);
+                              },
                               onPointerCancel: (_) => setState(() => drag = null),
                               child: GestureDetector(
                                   onTapUp: (t) => _calibTap(t.localPosition, sz),
                                   child: Stack(fit: StackFit.expand, children: [
                                     CameraPreview(cc),
-                                    CustomPaint(painter: _Overlay(List.of(calib), tip)),
+                                    CustomPaint(painter: _Overlay(List.of(calib), tip, diagOn.value ? blob : const [])),
                                   ])));
                         })))),
         Padding(
@@ -769,12 +1126,14 @@ class _GameState extends State<GamePage> {
                 child: OutlinedButton.icon(
                     onPressed: () => setState(() {
                           calib = [];
+                          saveCalib();
                           calDirty = true;
                           armed = false;
                           info = 'Kalibrieren: ${calibNames[0]} antippen';
                         }),
                     icon: const Icon(Icons.crop_free),
                     label: const Text('Kalib.'))),
+            IconButton(icon: const Icon(Icons.info_outline), onPressed: _tips),
           ]),
         ),
       ]);
@@ -815,8 +1174,8 @@ class _GameState extends State<GamePage> {
               if (g.msg != null)
                 const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
               if (route != null) ...[
-                const Text('CHECKOUT  ', style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 11)),
-                Text(route.map((d) => d.label).join(' · '), style: const TextStyle(color: kViolet, fontSize: 18)),
+                Text('CHECKOUT  ', style: TextStyle(color: kDim, letterSpacing: 2, fontSize: 11)),
+                Text(route.map((d) => d.label).join(' · '), style: TextStyle(color: kViolet, fontSize: 18)),
               ],
             ])),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
@@ -826,6 +1185,8 @@ class _GameState extends State<GamePage> {
           physics: drag != null ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
           onPageChanged: (i) => setState(() {
             manual = i == 0;
+            g.hold = !manual;
+            if (manual) g.confirmTurn();
             if (!manual) {
               armed = false;
               base = null;
@@ -833,7 +1194,10 @@ class _GameState extends State<GamePage> {
               info = '${g.names[g.cur]} antippen für Referenzbild';
             }
           }),
-          children: [_keypad(), _cameraPage(ctrl)],
+          children: [_keys((d) {
+            mult = 1;
+            _add(d);
+          }, setState, '↶', () => setState(g.undo)), _cameraPage(ctrl)],
         )),
       ]),
     );
@@ -850,11 +1214,11 @@ class _Dots extends CustomPainter {
         for (var x = 10.0; x < s.width; x += 16) Offset(x, y)
     ];
     c.drawPoints(PointMode.points, pts,
-        Paint()..color = Colors.white.withOpacity(.07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
+        Paint()..color = kInk.withOpacity(.07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
   }
 
   @override
-  bool shouldRepaint(_) => false;
+  bool shouldRepaint(_) => true;
 }
 
 const _glyph = {
@@ -869,39 +1233,50 @@ const _glyph = {
   '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
   '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
   '–': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+  'S': ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
+  't': ['01000', '01000', '11110', '01000', '01000', '01001', '00110'],
+  'a': ['00000', '00000', '01110', '00001', '01111', '10001', '01111'],
+  'n': ['00000', '00000', '10110', '11001', '10001', '10001', '10001'],
+  'D': ['11110', '10001', '10001', '10001', '10001', '10001', '11110'],
+  'r': ['00000', '00000', '10110', '11001', '10000', '10000', '10000'],
 };
 
-/// Zahl als Punktmatrix-Anzeige (5x7), unbelegte Punkte schwach sichtbar
+/// Text als Punktmatrix-Anzeige (5x7), unbelegte Punkte schwach sichtbar; reveal = spaltenweises Aufleuchten
 class DotNum extends StatelessWidget {
   final String text;
   final Color color;
-  final double u;
-  const DotNum(this.text, this.color, {super.key, this.u = 8});
+  final double u, reveal;
+  final bool multi;
+  const DotNum(this.text, this.color, {super.key, this.u = 8, this.reveal = 1, this.multi = false});
   @override
   Widget build(BuildContext c) =>
-      CustomPaint(size: Size(text.length * 6 * u - u, 7 * u), painter: _DotNum(text, color, u));
+      CustomPaint(size: Size(text.length * 6 * u - u, 7 * u), painter: _DotNum(text, color, u, reveal, multi));
 }
 
 class _DotNum extends CustomPainter {
   final String text;
   final Color color;
-  final double u;
-  _DotNum(this.text, this.color, this.u);
+  final double u, reveal;
+  final bool multi;
+  _DotNum(this.text, this.color, this.u, this.reveal, this.multi);
   @override
   void paint(Canvas c, Size s) {
-    final on = Paint()..color = color, off = Paint()..color = color.withOpacity(.10);
+    final lit = reveal * text.length * 6;
     for (var i = 0; i < text.length; i++) {
+      final col = multi ? teamColors[i % teamColors.length] : color;
+      final on = Paint()..color = col, off = Paint()..color = col.withOpacity(.10);
       final g = _glyph[text[i]] ?? _glyph['–']!;
       for (var y = 0; y < 7; y++) {
         for (var x = 0; x < 5; x++) {
-          c.drawCircle(Offset(i * 6 * u + x * u + u / 2, y * u + u / 2), u * .36, g[y][x] == '1' ? on : off);
+          final isOn = g[y][x] == '1' && i * 6 + x <= lit;
+          c.drawCircle(Offset(i * 6 * u + x * u + u / 2, y * u + u / 2), u * .36, isOn ? on : off);
         }
       }
     }
   }
 
   @override
-  bool shouldRepaint(_DotNum o) => o.text != text || o.color != color;
+  bool shouldRepaint(_DotNum o) => o.text != text || o.color != color || o.reveal != reveal;
 }
 
 /// Sieger: blinkender Titel, Name springt ein, Pixel-Konfetti in Teamfarbe
@@ -981,7 +1356,7 @@ class _Confetti extends CustomPainter {
   _Confetti(this.t);
   @override
   void paint(Canvas c, Size s) {
-    const cols = [Colors.white, Colors.black, kViolet, kAccent, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+    final cols = [Colors.white, Colors.black, kViolet, kAccent, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
     const n = 48;
     for (var i = 0; i < n; i++) {
       final x = (i * 0.618034 % 1) * s.width;
@@ -995,11 +1370,93 @@ class _Confetti extends CustomPainter {
   bool shouldRepaint(_Confetti o) => o.t != t;
 }
 
+/// Logo: Punktmatrix-Scheibe in 90er-Farben mit hartem Schatten und Pfeil
+class LogoMark extends StatelessWidget {
+  final double size;
+  const LogoMark(this.size, {super.key});
+  @override
+  Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _Logo());
+}
+
+class _Logo extends CustomPainter {
+  @override
+  void paint(Canvas c, Size s) {
+    final m = s.center(Offset.zero), R = s.width * .42;
+    const radii = [1.0, .72, .46, .2];
+    const counts = [36, 26, 16, 7];
+    for (var pass = 0; pass < 2; pass++) {
+      final sh = pass == 0 ? Offset(s.width * .035, s.width * .035) : Offset.zero;
+      for (var r = 0; r < 4; r++) {
+        final p = Paint()..color = pass == 0 ? kInk.withOpacity(.3) : teamColors[r];
+        for (var k = 0; k < counts[r]; k++) {
+          final a = k * 2 * pi / counts[r];
+          c.drawCircle(m + sh + Offset(cos(a), sin(a)) * R * radii[r], s.width * .026, p);
+        }
+      }
+      final ap = Paint()..color = pass == 0 ? kInk.withOpacity(.3) : kInk;
+      for (var k = 0; k < 7; k++) {
+        final t = k / 6;
+        c.drawCircle(m + sh + Offset(R * 1.05 * (1 - t), -R * 1.05 * (1 - t)), s.width * (.018 + .012 * t), ap);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => true;
+}
+
+/// Kurzer Startbildschirm, Tippen überspringt
+class SplashPage extends StatefulWidget {
+  const SplashPage({super.key});
+  @override
+  State<SplashPage> createState() => _SplashState();
+}
+
+class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin {
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
+    ..addStatusListener((st) {
+      if (st == AnimationStatus.completed) _go();
+    })
+    ..forward();
+  bool gone = false;
+  void _go() {
+    if (gone || !mounted) return;
+    gone = true;
+    Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+            pageBuilder: (_, __, ___) => const SetupPage(),
+            transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
+            transitionDuration: const Duration(milliseconds: 250)));
+  }
+
+  @override
+  void dispose() {
+    ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _go,
+      child: Scaffold(
+          body: Center(
+              child: AnimatedBuilder(
+                  animation: ac,
+                  builder: (_, __) => Column(mainAxisSize: MainAxisSize.min, children: [
+                        Opacity(opacity: min(1.0, ac.value * 4), child: const LogoMark(150)),
+                        const SizedBox(height: 32),
+                        FittedBox(child: DotNum('StanDart', kInk, u: 6, reveal: min(1.0, ac.value * 1.5), multi: true)),
+                      ])))));
+}
+
 // ---------- Kamera-Overlay ----------
 class _Overlay extends CustomPainter {
   final List<Offset> pts;
   final Offset? tip;
-  _Overlay(this.pts, this.tip);
+  final List<Offset> blob;
+  _Overlay(this.pts, this.tip, this.blob);
   @override
   void paint(Canvas c, Size s) {
     final thick = Paint()
@@ -1037,6 +1494,10 @@ class _Overlay extends CustomPainter {
           ..layout();
         tp.paint(c, at(1.1, 18.0 * k) - Offset(tp.width / 2, tp.height / 2));
       }
+    }
+    final bp = Paint()..color = kViolet.withOpacity(.6);
+    for (final o in blob) {
+      c.drawCircle(sc(o), 1.6, bp);
     }
     if (tip != null) {
       c.drawCircle(sc(tip!), 6, Paint()..color = kViolet);
