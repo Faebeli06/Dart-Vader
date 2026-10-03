@@ -125,15 +125,27 @@ class Game {
   List<Dart> darts = [];
   String? winner, msg;
   bool hold = false, held = false; // hold: Zugende erst nach Bestätigung
-  Game(this.names, this.start, this.dbl) : turnStart = start {
+  final bool wm, tieBreak; // WM-Modus: Sätze (first to 3 Legs), Entscheidungssatz mit 2 Legs Vorsprung
+  final int setsToWin;
+  late List<int> legs, sets, done; // done: Punkte aus abgeschlossenen Legs (für den Match-Schnitt)
+  int legStart = 0, setStart = 0;
+  int? legWinner, setWinner;
+  Game(this.names, this.start, this.dbl, {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0})
+      : turnStart = start {
+    cur = first;
+    legStart = first;
+    setStart = first;
+    legs = List.filled(names.length, 0);
+    sets = List.filled(names.length, 0);
+    done = List.filled(names.length, 0);
     scores = List.filled(names.length, start);
     thrown = List.filled(names.length, 0);
     last = List.generate(names.length, (_) => <Dart>[]);
   }
-  String avg(int i) => thrown[i] == 0 ? '–' : ((start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
+  String avg(int i) => thrown[i] == 0 ? '–' : ((done[i] + start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
   int _sum() => darts.fold<int>(0, (s, d) => s + d.points);
   void add(Dart d) {
-    if (winner != null || held) return;
+    if (winner != null || held || legWinner != null) return;
     _save();
     msg = null;
     thrown[cur]++;
@@ -152,7 +164,11 @@ class Game {
     }
     scores[cur] = rem;
     if (rem == 0) {
-      winner = names[cur];
+      if (wm) {
+        _legWon();
+      } else {
+        winner = names[cur];
+      }
       return;
     }
     if (darts.length == 3) {
@@ -171,6 +187,45 @@ class Game {
     turnStart = scores[cur];
   }
 
+  void _legWon() {
+    for (var i = 0; i < names.length; i++) {
+      done[i] += start - scores[i];
+    }
+    final w = cur;
+    legs[w]++;
+    legWinner = w;
+    setWinner = null;
+    final deciding = sets[0] == setsToWin - 1 && sets[1] == setsToWin - 1;
+    final o = legs[1 - w];
+    final won = deciding && tieBreak ? ((legs[w] >= 3 && legs[w] - o >= 2) || legs[w] >= 6) : legs[w] >= 3;
+    if (won) {
+      sets[w]++;
+      setWinner = w;
+      if (sets[w] >= setsToWin) winner = names[w];
+    }
+  }
+
+  /// Nächstes Leg: Anwurf wechselt; nach einem Satz wechselt auch der Satz-Anwurf.
+  void nextLeg() {
+    if (legWinner == null || winner != null) return;
+    if (setWinner != null) {
+      legs = List.filled(names.length, 0);
+      setStart = (setStart + 1) % names.length;
+      legStart = setStart;
+    } else {
+      legStart = (legStart + 1) % names.length;
+    }
+    legWinner = null;
+    setWinner = null;
+    scores = List.filled(names.length, start);
+    last = List.generate(names.length, (_) => <Dart>[]);
+    darts = [];
+    msg = null;
+    held = false;
+    cur = legStart;
+    turnStart = start;
+  }
+
   final hist = <List<Object?>>[];
   void _save() => hist.add([
         List<int>.of(scores),
@@ -181,7 +236,14 @@ class Game {
         List<Dart>.of(darts),
         winner,
         msg,
-        held
+        held,
+        List<int>.of(legs),
+        List<int>.of(sets),
+        List<int>.of(done),
+        legStart,
+        setStart,
+        legWinner,
+        setWinner
       ]);
 
   void confirmTurn() {
@@ -215,6 +277,13 @@ class Game {
     winner = h[6] as String?;
     msg = h[7] as String?;
     held = h[8] as bool;
+    legs = h[9] as List<int>;
+    sets = h[10] as List<int>;
+    done = h[11] as List<int>;
+    legStart = h[12] as int;
+    setStart = h[13] as int;
+    legWinner = h[14] as int?;
+    setWinner = h[15] as int?;
   }
 }
 
@@ -288,8 +357,11 @@ class SetupPage extends StatefulWidget {
 }
 
 class _SetupState extends State<SetupPage> {
-  int players = 2, start = 501;
-  bool dbl = true;
+  int players = 2, start = 501, round = 1, first = 0;
+  bool dbl = true, wm = false;
+  static const _rounds = ['Runde 1 (kein Tie-Break)', 'Runde 2', 'Runde 3/4', 'Viertelfinale', 'Halbfinale', 'Finale'];
+  static const _setsTo = [3, 3, 4, 5, 6, 7];
+  int get n => wm ? 2 : players;
   final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
 
   @override
@@ -394,7 +466,7 @@ class _SetupState extends State<SetupPage> {
                   selected: {players},
                   onSelectionChanged: (s) => setState(() => players = s.first)),
               const SizedBox(height: 16),
-              for (var i = 0; i < players; i++)
+              for (var i = 0; i < n; i++)
                 Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: TextField(
@@ -415,6 +487,31 @@ class _SetupState extends State<SetupPage> {
                   selected: {start},
                   onSelectionChanged: (s) => setState(() => start = s.first)),
               SwitchListTile(title: const Text('Double-Out'), value: dbl, onChanged: (v) => setState(() => dbl = v)),
+              SwitchListTile(
+                  title: const Text('WM-Modus (Sätze & Legs)'),
+                  subtitle: const Text('wie bei der PDC-WM: 501, Double-Out'),
+                  value: wm,
+                  onChanged: (v) => setState(() => wm = v)),
+              if (wm) ...[
+                const SizedBox(height: 8),
+                Text('RUNDE (SÄTZE: FIRST TO ${_setsTo[round]})', style: TextStyle(letterSpacing: 2, color: kDim)),
+                Wrap(spacing: 8, children: [
+                  for (var i = 0; i < _rounds.length; i++)
+                    ChoiceChip(label: Text(_rounds[i]), selected: round == i, onSelected: (_) => setState(() => round = i))
+                ]),
+                const SizedBox(height: 12),
+                Text('BULL-UP: WER WIRFT ZUERST?', style: TextStyle(letterSpacing: 2, color: kDim)),
+                Wrap(spacing: 8, children: [
+                  for (var i = 0; i < 2; i++)
+                    ChoiceChip(
+                        label: Text(ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()),
+                        selected: first == i,
+                        onSelected: (_) => setState(() => first = i))
+                ]),
+                const SizedBox(height: 8),
+                Text('Satz = first to 3 Legs, Anwurf wechselt je Leg und Satz. Entscheidungssatz: 2 Legs Vorsprung, bei 5:5 Sudden Death.',
+                    style: TextStyle(fontSize: 11, color: kDim)),
+              ],
             ])),
             FilledButton(
                 onPressed: () {
@@ -423,9 +520,10 @@ class _SetupState extends State<SetupPage> {
                     c,
                     MaterialPageRoute(
                         builder: (_) => GamePage(Game([
-                              for (var i = 0; i < players; i++)
+                              for (var i = 0; i < n; i++)
                                 ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()
-                            ], start, dbl))));
+                            ], wm ? 501 : start, wm ? true : dbl,
+                            wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first))));
                 },
                 child: const Text('Spiel starten')),
           ]),
@@ -883,7 +981,7 @@ class _GameState extends State<GamePage> {
 
   /// Auto-Erkennung: Position muss in zwei Aufnahmen hintereinander (fast) gleich sein.
   Future<void> _tick() async {
-    if (manual || !auto || !armed || busy || ctrl == null || base == null || g.winner != null) return;
+    if (manual || !auto || !armed || busy || ctrl == null || base == null || g.winner != null || g.legWinner != null) return;
     busy = true;
     try {
       final now = await _shot();
@@ -1057,8 +1155,9 @@ class _GameState extends State<GamePage> {
                     border: Border.all(color: cur || (g.held && i == nextI) ? col : kLine, width: cur ? 2 : 1.5),
                     boxShadow: cur ? [BoxShadow(color: col, offset: const Offset(4, 4))] : null),
                 child: Column(children: [
-                  Text('${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
+                  Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
+                  if (g.wm) Text('SÄTZE ${g.sets[i]}  LEGS ${g.legs[i]}', style: TextStyle(fontSize: 10, color: kDim)),
                   const SizedBox(height: 4),
                   FittedBox(child: DotNum('${g.scores[i]}', kInk)),
                   Text('Ø ${g.avg(i)}', style: TextStyle(fontSize: 12, color: kDim)),
@@ -1082,11 +1181,39 @@ class _GameState extends State<GamePage> {
                 ]))));
   }
 
+  List<String> _lines() => [
+        for (var i = 0; i < g.names.length; i++)
+          '${g.names[i]}${g.wm ? '   S ${g.sets[i]}  L ${g.legs[i]}' : ''}   Ø ${g.avg(i)}   ${g.thrown[i]} Darts'
+      ];
+
   Widget _win(BuildContext c) => WinScreen(
       g: g,
+      title: 'GEWINNER',
+      who: g.winner!,
+      lines: _lines(),
+      nextLabel: 'REVANCHE',
       onUndo: () => setState(g.undo),
-      onRematch: () => Navigator.pushReplacement(
-          c, MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl)))),
+      onNext: () => Navigator.pushReplacement(
+          c,
+          MaterialPageRoute(
+              builder: (_) => GamePage(Game(g.names, g.start, g.dbl, wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak)))),
+      onMenu: () => Navigator.pop(c));
+
+  Widget _legScreen(BuildContext c) => WinScreen(
+      g: g,
+      title: g.setWinner != null ? 'SATZ GEWONNEN' : 'LEG GEWONNEN',
+      who: g.names[g.legWinner!],
+      lines: [
+        for (var i = 0; i < g.names.length; i++) '${g.names[i]}   SÄTZE ${g.sets[i]}   LEGS ${g.legs[i]}   Ø ${g.avg(i)}'
+      ],
+      nextLabel: 'NÄCHSTES LEG',
+      onUndo: () => setState(g.undo),
+      onNext: () => setState(() {
+            g.nextLeg();
+            armed = false;
+            base = null;
+            info = manual ? '' : '${g.names[g.cur]} antippen für Referenzbild';
+          }),
       onMenu: () => Navigator.pop(c));
 
   Widget _cameraPage(CameraController? cc) => Column(children: [
@@ -1141,6 +1268,7 @@ class _GameState extends State<GamePage> {
   @override
   Widget build(BuildContext c) {
     if (g.winner != null) return _win(c);
+    if (g.legWinner != null) return _legScreen(c);
     final rem = g.scores[g.cur];
     final route = rem <= (g.dbl ? 170 : 180) ? checkout(rem, g.dbl, 3 - g.darts.length) : null;
     Widget pill(int i, String t) {
@@ -1282,8 +1410,19 @@ class _DotNum extends CustomPainter {
 /// Sieger: blinkender Titel, Name springt ein, Pixel-Konfetti in Teamfarbe
 class WinScreen extends StatefulWidget {
   final Game g;
-  final VoidCallback onUndo, onRematch, onMenu;
-  const WinScreen({super.key, required this.g, required this.onUndo, required this.onRematch, required this.onMenu});
+  final String title, who, nextLabel;
+  final List<String> lines;
+  final VoidCallback onUndo, onNext, onMenu;
+  const WinScreen(
+      {super.key,
+      required this.g,
+      required this.title,
+      required this.who,
+      required this.lines,
+      required this.nextLabel,
+      required this.onUndo,
+      required this.onNext,
+      required this.onMenu});
   @override
   State<WinScreen> createState() => _WinState();
 }
@@ -1323,7 +1462,7 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
                         animation: ac,
                         builder: (_, __) => Opacity(
                             opacity: (ac.value * 10).floor() % 2 == 0 ? 1 : .3,
-                            child: const Text('★ GEWINNER ★',
+                            child: Text('★ ${widget.title} ★',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.black, letterSpacing: 6, fontSize: 18)))),
                     const SizedBox(height: 16),
@@ -1333,19 +1472,19 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
                         curve: Curves.elasticOut,
                         builder: (_, v, child) => Transform.scale(scale: v, child: child),
                         child: FittedBox(
-                            child: Text(g.winner!.toUpperCase(),
+                            child: Text(widget.who.toUpperCase(),
                                 style: const TextStyle(
                                     color: Colors.black,
                                     fontSize: 80,
                                     fontWeight: FontWeight.bold,
                                     shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
                     const SizedBox(height: 28),
-                    for (var i = 0; i < g.names.length; i++)
-                      Text('${g.names[i]}   Ø ${g.avg(i)}   ${g.thrown[i]} Darts',
+                    for (final l in widget.lines)
+                      Text(l,
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.black87, fontSize: 16, height: 1.6)),
                     const Spacer(),
-                    Row(children: [btn('ZURÜCK', widget.onUndo), btn('REVANCHE', widget.onRematch), btn('MENÜ', widget.onMenu)]),
+                    Row(children: [btn('ZURÜCK', widget.onUndo), btn(widget.nextLabel, widget.onNext), btn('MENÜ', widget.onMenu)]),
                   ]))),
         ]));
   }
@@ -1370,7 +1509,7 @@ class _Confetti extends CustomPainter {
   bool shouldRepaint(_Confetti o) => o.t != t;
 }
 
-/// Logo: Punktmatrix-Scheibe in 90er-Farben mit hartem Schatten und Pfeil
+/// Logo: Pfeil in 90er-Farben mit hartem Schatten
 class LogoMark extends StatelessWidget {
   final double size;
   const LogoMark(this.size, {super.key});
@@ -1381,23 +1520,20 @@ class LogoMark extends StatelessWidget {
 class _Logo extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
-    final m = s.center(Offset.zero), R = s.width * .42;
-    const radii = [1.0, .72, .46, .2];
-    const counts = [36, 26, 16, 7];
+    final u = s.width;
     for (var pass = 0; pass < 2; pass++) {
-      final sh = pass == 0 ? Offset(s.width * .035, s.width * .035) : Offset.zero;
-      for (var r = 0; r < 4; r++) {
-        final p = Paint()..color = pass == 0 ? kInk.withOpacity(.3) : teamColors[r];
-        for (var k = 0; k < counts[r]; k++) {
-          final a = k * 2 * pi / counts[r];
-          c.drawCircle(m + sh + Offset(cos(a), sin(a)) * R * radii[r], s.width * .026, p);
-        }
-      }
-      final ap = Paint()..color = pass == 0 ? kInk.withOpacity(.3) : kInk;
-      for (var k = 0; k < 7; k++) {
-        final t = k / 6;
-        c.drawCircle(m + sh + Offset(R * 1.05 * (1 - t), -R * 1.05 * (1 - t)), s.width * (.018 + .012 * t), ap);
-      }
+      final off = pass == 0 ? u * .035 : 0.0;
+      c.save();
+      c.translate(u / 2 + off, u / 2 + off);
+      c.rotate(-pi / 4);
+      Paint p(Color col) => Paint()..color = pass == 0 ? kInk.withOpacity(.3) : col;
+      c.drawPath(Path()..moveTo(-.46 * u, 0)..lineTo(-.34 * u, -.03 * u)..lineTo(-.34 * u, .03 * u)..close(), p(kInk));
+      c.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(kAccent));
+      c.drawRect(Rect.fromLTRB(-.08 * u, -.018 * u, .14 * u, .018 * u), p(kInk));
+      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, -.16 * u)..lineTo(.44 * u, -.16 * u)..lineTo(.34 * u, 0)..close(), p(kViolet));
+      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, .16 * u)..lineTo(.44 * u, .16 * u)..lineTo(.34 * u, 0)..close(), p(teamColors[2]));
+      c.restore();
     }
   }
 
@@ -1413,7 +1549,7 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin {
-  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 2500))
     ..addStatusListener((st) {
       if (st == AnimationStatus.completed) _go();
     })
@@ -1445,9 +1581,21 @@ class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin
               child: AnimatedBuilder(
                   animation: ac,
                   builder: (_, __) => Column(mainAxisSize: MainAxisSize.min, children: [
-                        Opacity(opacity: min(1.0, ac.value * 4), child: const LogoMark(150)),
+                        Opacity(opacity: min(1.0, ac.value * 5), child: const LogoMark(170)),
                         const SizedBox(height: 32),
-                        FittedBox(child: DotNum('StanDart', kInk, u: 6, reveal: min(1.0, ac.value * 1.5), multi: true)),
+                        Opacity(
+                            opacity: min(1.0, max(0.0, (ac.value - .12) * 4)),
+                            child: FittedBox(
+                                child: Text('StanDart',
+                                    style: TextStyle(
+                                        fontSize: 56,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 3,
+                                        color: darkMode.value ? Colors.white : kInk,
+                                        shadows: [
+                                          Shadow(color: kAccent, offset: const Offset(4, 4)),
+                                          Shadow(color: kViolet, offset: const Offset(8, 8))
+                                        ])))),
                       ])))));
 }
 
