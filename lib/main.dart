@@ -1,25 +1,29 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' show PointMode;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
-const kAccent = Color(0xFF2DE2C8); // türkis
-const kViolet = Color(0xFF9B7BFF);
-const kLine = Color(0xFF2A2A2A);
-const teamColors = [kAccent, kViolet, Color(0xFFFFB84D), Color(0xFFFF6B8A)];
+// 90s-Palette (Türkis, Lila, Pink, Gelb) auf Nothing-Schwarz
+const kBg = Color(0xFF09080F);
+const kAccent = Color(0xFF1AE5D0); // türkis
+const kViolet = Color(0xFF9A6BFF);
+const kLine = Color(0xFF2B2838);
+const teamColors = [kAccent, kViolet, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
 
 void main() => runApp(MaterialApp(
     title: 'Dart Zähler',
+    builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
     theme: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
         fontFamily: 'monospace',
-        scaffoldBackgroundColor: Colors.black,
-        colorScheme: const ColorScheme.dark(primary: kAccent, secondary: kViolet, surface: Colors.black),
+        scaffoldBackgroundColor: Colors.transparent,
+        colorScheme: const ColorScheme.dark(primary: kAccent, secondary: kViolet, surface: kBg),
         appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.black,
+            backgroundColor: Colors.transparent,
             scrolledUnderElevation: 0,
             titleTextStyle: TextStyle(fontFamily: 'monospace', fontSize: 16, letterSpacing: 2, color: Colors.white)),
         bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Color(0xFF0D0D0D)),
@@ -650,9 +654,10 @@ class _GameState extends State<GamePage> {
             padding: const EdgeInsets.all(3),
             child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    backgroundColor: sel ? kAccent.withOpacity(.18) : null,
-                    side: BorderSide(color: sel ? kAccent : kLine)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    foregroundColor: sel ? Colors.black : Colors.white,
+                    backgroundColor: sel ? kAccent : null,
+                    side: BorderSide(color: sel ? kAccent : kLine, width: 1.5)),
                 onPressed: f,
                 child: FittedBox(child: Text(t, style: const TextStyle(fontSize: 20))))));
     void pick(Dart d) {
@@ -689,19 +694,20 @@ class _GameState extends State<GamePage> {
         child: GestureDetector(
             onTap: cur && !manual ? _arm : null,
             child: Container(
-                margin: const EdgeInsets.all(4),
+                margin: const EdgeInsets.fromLTRB(5, 5, 9, 9),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color: cur ? col.withOpacity(armed ? .25 : .10) : const Color(0xFF0C0C0C),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: cur ? col : kLine, width: cur ? 2 : 1)),
+                    color: cur
+                        ? Color.alphaBlend(col.withOpacity(armed ? .22 : .08), const Color(0xFF14121C))
+                        : const Color(0xFF0F0D16),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: cur ? col : kLine, width: cur ? 2 : 1.5),
+                    boxShadow: cur ? [BoxShadow(color: col, offset: const Offset(4, 4))] : null),
                 child: Column(children: [
                   Text(g.names[i].toUpperCase(),
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
                   const SizedBox(height: 4),
-                  FittedBox(
-                      child: Text('${g.scores[i]}',
-                          style: TextStyle(fontSize: 46, color: cur ? Colors.white : Colors.white60))),
+                  FittedBox(child: DotNum('${g.scores[i]}', cur ? Colors.white : Colors.white54)),
                   Text('Ø ${g.avg(i)}', style: const TextStyle(fontSize: 12, color: Colors.white54)),
                   const SizedBox(height: 8),
                   Row(children: [
@@ -722,41 +728,12 @@ class _GameState extends State<GamePage> {
                 ]))));
   }
 
-  Widget _win(BuildContext c) {
-    final col = teamColors[g.cur % teamColors.length];
-    Widget btn(String t, VoidCallback f) => Expanded(
-        child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
-                onPressed: f,
-                child: FittedBox(child: Text(t)))));
-    return Scaffold(
-        backgroundColor: col,
-        body: SafeArea(
-            child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const Spacer(),
-                  const Text('GEWINNER',
-                      textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, letterSpacing: 8, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  FittedBox(
-                      child: Text(g.winner!.toUpperCase(),
-                          style: const TextStyle(color: Colors.black, fontSize: 80, fontWeight: FontWeight.bold))),
-                  const SizedBox(height: 28),
-                  for (var i = 0; i < g.names.length; i++)
-                    Text('${g.names[i]}   Ø ${g.avg(i)}   ${g.thrown[i]} Darts',
-                        textAlign: TextAlign.center, style: const TextStyle(color: Colors.black87, fontSize: 16, height: 1.6)),
-                  const Spacer(),
-                  Row(children: [
-                    btn('ZURÜCK', () => setState(g.undo)),
-                    btn('REVANCHE', () => Navigator.pushReplacement(
-                        c, MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl))))),
-                    btn('MENÜ', () => Navigator.pop(c)),
-                  ]),
-                ]))));
-  }
+  Widget _win(BuildContext c) => WinScreen(
+      g: g,
+      onUndo: () => setState(g.undo),
+      onRematch: () => Navigator.pushReplacement(
+          c, MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl)))),
+      onMenu: () => Navigator.pop(c));
 
   Widget _cameraPage(CameraController? cc) => Column(children: [
         Padding(padding: const EdgeInsets.all(8), child: Text(info, textAlign: TextAlign.center)),
@@ -861,6 +838,161 @@ class _GameState extends State<GamePage> {
       ]),
     );
   }
+}
+
+// ---------- Design-Bausteine ----------
+/// Dezentes Punktraster im Hintergrund (Nothing-Stil)
+class _Dots extends CustomPainter {
+  @override
+  void paint(Canvas c, Size s) {
+    final pts = <Offset>[
+      for (var y = 10.0; y < s.height; y += 16)
+        for (var x = 10.0; x < s.width; x += 16) Offset(x, y)
+    ];
+    c.drawPoints(PointMode.points, pts,
+        Paint()..color = Colors.white.withOpacity(.07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+const _glyph = {
+  '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
+  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
+  '3': ['11110', '00001', '00001', '01110', '00001', '00001', '11110'],
+  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
+  '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
+  '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'],
+  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
+  '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
+  '–': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+};
+
+/// Zahl als Punktmatrix-Anzeige (5x7), unbelegte Punkte schwach sichtbar
+class DotNum extends StatelessWidget {
+  final String text;
+  final Color color;
+  final double u;
+  const DotNum(this.text, this.color, {super.key, this.u = 8});
+  @override
+  Widget build(BuildContext c) =>
+      CustomPaint(size: Size(text.length * 6 * u - u, 7 * u), painter: _DotNum(text, color, u));
+}
+
+class _DotNum extends CustomPainter {
+  final String text;
+  final Color color;
+  final double u;
+  _DotNum(this.text, this.color, this.u);
+  @override
+  void paint(Canvas c, Size s) {
+    final on = Paint()..color = color, off = Paint()..color = color.withOpacity(.10);
+    for (var i = 0; i < text.length; i++) {
+      final g = _glyph[text[i]] ?? _glyph['–']!;
+      for (var y = 0; y < 7; y++) {
+        for (var x = 0; x < 5; x++) {
+          c.drawCircle(Offset(i * 6 * u + x * u + u / 2, y * u + u / 2), u * .36, g[y][x] == '1' ? on : off);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotNum o) => o.text != text || o.color != color;
+}
+
+/// Sieger: blinkender Titel, Name springt ein, Pixel-Konfetti in Teamfarbe
+class WinScreen extends StatefulWidget {
+  final Game g;
+  final VoidCallback onUndo, onRematch, onMenu;
+  const WinScreen({super.key, required this.g, required this.onUndo, required this.onRematch, required this.onMenu});
+  @override
+  State<WinScreen> createState() => _WinState();
+}
+
+class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+  @override
+  void dispose() {
+    ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) {
+    final g = widget.g, col = teamColors[g.cur % teamColors.length];
+    Widget btn(String t, VoidCallback f) => Expanded(
+        child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                onPressed: f,
+                child: FittedBox(child: Text(t)))));
+    return Scaffold(
+        backgroundColor: col,
+        body: Stack(children: [
+          Positioned.fill(
+              child: AnimatedBuilder(animation: ac, builder: (_, __) => CustomPaint(painter: _Confetti(ac.value)))),
+          SafeArea(
+              child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Spacer(),
+                    AnimatedBuilder(
+                        animation: ac,
+                        builder: (_, __) => Opacity(
+                            opacity: (ac.value * 10).floor() % 2 == 0 ? 1 : .3,
+                            child: const Text('★ GEWINNER ★',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.black, letterSpacing: 6, fontSize: 18)))),
+                    const SizedBox(height: 16),
+                    TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 1000),
+                        curve: Curves.elasticOut,
+                        builder: (_, v, child) => Transform.scale(scale: v, child: child),
+                        child: FittedBox(
+                            child: Text(g.winner!.toUpperCase(),
+                                style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 80,
+                                    fontWeight: FontWeight.bold,
+                                    shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
+                    const SizedBox(height: 28),
+                    for (var i = 0; i < g.names.length; i++)
+                      Text('${g.names[i]}   Ø ${g.avg(i)}   ${g.thrown[i]} Darts',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.black87, fontSize: 16, height: 1.6)),
+                    const Spacer(),
+                    Row(children: [btn('ZURÜCK', widget.onUndo), btn('REVANCHE', widget.onRematch), btn('MENÜ', widget.onMenu)]),
+                  ]))),
+        ]));
+  }
+}
+
+class _Confetti extends CustomPainter {
+  final double t;
+  _Confetti(this.t);
+  @override
+  void paint(Canvas c, Size s) {
+    const cols = [Colors.white, Colors.black, kViolet, kAccent, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+    const n = 48;
+    for (var i = 0; i < n; i++) {
+      final x = (i * 0.618034 % 1) * s.width;
+      final y = ((t * (1 + i % 2) + i / n) % 1) * (s.height + 20) - 10;
+      final sz = 6.0 + (i % 3) * 4;
+      c.drawRect(Rect.fromLTWH(x, y, sz, sz), Paint()..color = cols[i % cols.length].withOpacity(.85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Confetti o) => o.t != t;
 }
 
 // ---------- Kamera-Overlay ----------
