@@ -25,7 +25,7 @@ jobs:
           cp /tmp/pubspec.yaml pubspec.yaml
           sed -i 's#<application#<uses-permission android:name="android.permission.CAMERA"/>\n    <application#' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="StanDart"/' android/app/src/main/AndroidManifest.xml
-      - name: Icon erzeugen
+      - name: Icon erzeugen (Pfeil)
         run: |
           python3 -m pip install --break-system-packages pillow
           python3 - <<'EOF'
@@ -34,25 +34,19 @@ jobs:
           S = 1024
           im = Image.new('RGB', (S, S), (9, 8, 15))
           d = ImageDraw.Draw(im)
-          cols = [(26, 229, 208), (154, 107, 255), (255, 95, 162), (255, 210, 63)]
-          rad = [1, .72, .46, .2]
-          cnt = [36, 26, 16, 7]
-          R = S * .42
-          m = S / 2
-          for sh in (S * .035, 0):
-              for r in range(4):
-                  for k in range(cnt[r]):
-                      a = k * 2 * math.pi / cnt[r]
-                      x = m + sh + math.cos(a) * R * rad[r]
-                      y = m + sh + math.sin(a) * R * rad[r]
-                      q = S * .026
-                      d.ellipse([x - q, y - q, x + q, y + q], fill=(60, 58, 70) if sh else cols[r])
-              for k in range(7):
-                  t = k / 6
-                  x = m + sh + R * 1.05 * (1 - t)
-                  y = m + sh - R * 1.05 * (1 - t)
-                  q = S * (.018 + .012 * t)
-                  d.ellipse([x - q, y - q, x + q, y + q], fill=(60, 58, 70) if sh else (244, 242, 250))
+          k = math.sqrt(.5)
+          def T(x, y, off):
+              return (S / 2 + off + (k * x + k * y) * S, S / 2 + off + (-k * x + k * y) * S)
+          def poly(pts, col, off):
+              d.polygon([T(x, y, off) for x, y in pts], fill=col)
+          shade = (60, 58, 70)
+          for off in (S * .035, 0):
+              c = lambda col: shade if off else col
+              poly([(-.46, 0), (-.34, -.03), (-.34, .03)], c((244, 242, 250)), off)
+              poly([(-.34, -.055), (-.08, -.055), (-.08, .055), (-.34, .055)], c((26, 229, 208)), off)
+              poly([(-.08, -.018), (.14, -.018), (.14, .018), (-.08, .018)], c((244, 242, 250)), off)
+              poly([(.08, 0), (.2, -.16), (.44, -.16), (.34, 0)], c((154, 107, 255)), off)
+              poly([(.08, 0), (.2, .16), (.44, .16), (.34, 0)], c((255, 95, 162)), off)
           im.save('icon.png')
           EOF
       - run: flutter pub get
