@@ -349,49 +349,7 @@ List<Dart>? checkout(int rem, bool dbl, int left) {
   });
 }
 
-// ---------- Setup ----------
-class SetupPage extends StatefulWidget {
-  const SetupPage({super.key});
-  @override
-  State<SetupPage> createState() => _SetupState();
-}
-
-class _SetupState extends State<SetupPage> {
-  int players = 2, start = 501, round = 1, first = 0;
-  bool dbl = true, wm = false;
-  static const _rounds = ['Runde 1 (kein Tie-Break)', 'Runde 2', 'Runde 3/4', 'Viertelfinale', 'Halbfinale', 'Finale'];
-  static const _setsTo = [3, 3, 4, 5, 6, 7];
-  int get n => wm ? 2 : players;
-  final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
-
-  @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((p) {
-      if (!mounted) return;
-      final n = p.getStringList('names');
-      setState(() {
-        players = p.getInt('players') ?? players;
-        start = p.getInt('start') ?? start;
-        dbl = p.getBool('dbl') ?? dbl;
-        if (n != null) {
-          for (var i = 0; i < n.length && i < 4; i++) {
-            ctr[i].text = n[i];
-          }
-        }
-      });
-    });
-  }
-
-  Future<void> _saveSetup() async {
-    final p = await SharedPreferences.getInstance();
-    await p.setInt('players', players);
-    await p.setInt('start', start);
-    await p.setBool('dbl', dbl);
-    await p.setStringList('names', [for (final t in ctr) t.text]);
-  }
-
-  void _settings(BuildContext c) => showModalBottomSheet(
+void showSettings(BuildContext c) => showModalBottomSheet(
       context: c,
       builder: (c) => StatefulBuilder(
           builder: (c, set) => SafeArea(
@@ -447,70 +405,183 @@ class _SetupState extends State<SetupPage> {
                     }),
               ]))));
 
+// ---------- Modus-Auswahl (Startseite) ----------
+class ModePage extends StatelessWidget {
+  const ModePage({super.key});
+  Widget tile(BuildContext c, String big, String small, Color col, VoidCallback f) {
+    final txt = col.computeLuminance() > .35 ? Colors.black : Colors.white;
+    return GestureDetector(
+        onTap: f,
+        child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+                color: col,
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [BoxShadow(color: kInk.withOpacity(.3), offset: const Offset(6, 6))]),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(small, style: TextStyle(color: txt, fontSize: 11, letterSpacing: 2)),
+              const Spacer(),
+              FittedBox(child: Text(big, style: TextStyle(color: txt, fontSize: 60, fontWeight: FontWeight.w900))),
+            ])));
+  }
+
+  @override
+  Widget build(BuildContext c) => ValueListenableBuilder<bool>(
+      valueListenable: darkMode,
+      builder: (c, _, __) {
+        void go(int? pts, bool wm) =>
+            Navigator.push(c, MaterialPageRoute(builder: (_) => SetupPage(startPts: pts, wm: wm)));
+        return Scaffold(
+            appBar: AppBar(title: const Text('MODUS WÄHLEN'), actions: [
+              IconButton(icon: const Icon(Icons.settings), onPressed: () => showSettings(c))
+            ]),
+            body: GridView.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 22,
+                crossAxisSpacing: 22,
+                padding: const EdgeInsets.all(24),
+                children: [
+                  tile(c, '501', 'FREIES SPIEL', teamColors[0], () => go(501, false)),
+                  tile(c, '301', 'FREIES SPIEL', teamColors[1], () => go(301, false)),
+                  tile(c, '701', 'FREIES SPIEL', teamColors[2], () => go(701, false)),
+                  tile(c, 'WM', 'SÄTZE & LEGS', teamColors[3], () => go(null, true)),
+                ]));
+      });
+}
+
+// ---------- Setup ----------
+class SetupPage extends StatefulWidget {
+  final int? startPts;
+  final bool wm;
+  const SetupPage({super.key, this.startPts, this.wm = false});
+  @override
+  State<SetupPage> createState() => _SetupState();
+}
+
+class _SetupState extends State<SetupPage> {
+  int players = 2, start = 501, round = 1, first = 0;
+  bool dbl = true, wm = false;
+  static const _rounds = ['Runde 1 (kein Tie-Break)', 'Runde 2', 'Runde 3/4', 'Viertelfinale', 'Halbfinale', 'Finale'];
+  static const _setsTo = [3, 3, 4, 5, 6, 7];
+  int get n => wm ? 2 : players;
+  final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
+
+  Widget _sec(String t, Widget child) => Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+          color: kCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: kLine, width: 1.5)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(t, style: TextStyle(letterSpacing: 2, color: kDim, fontSize: 12)),
+        const SizedBox(height: 10),
+        child
+      ]));
+
+  Widget _names() => Column(children: [
+        for (var i = 0; i < n; i++)
+          Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TextField(
+                  controller: ctr[i],
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                      labelText: 'Name ${i + 1}',
+                      prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)))))
+      ]);
+
+  @override
+  void initState() {
+    super.initState();
+    wm = widget.wm;
+    if (widget.startPts != null) start = widget.startPts!;
+    SharedPreferences.getInstance().then((p) {
+      if (!mounted) return;
+      final n = p.getStringList('names');
+      setState(() {
+        players = p.getInt('players') ?? players;
+        start = widget.startPts ?? p.getInt('start') ?? start;
+        dbl = p.getBool('dbl') ?? dbl;
+        if (n != null) {
+          for (var i = 0; i < n.length && i < 4; i++) {
+            ctr[i].text = n[i];
+          }
+        }
+      });
+    });
+  }
+
+  Future<void> _saveSetup() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('players', players);
+    await p.setInt('start', start);
+    await p.setBool('dbl', dbl);
+    await p.setStringList('names', [for (final t in ctr) t.text]);
+  }
+
   @override
   Widget build(BuildContext c) => ValueListenableBuilder<bool>(
       valueListenable: darkMode,
       builder: (c, _, __) => Scaffold(
-        appBar: AppBar(title: const Text('STANDART'), actions: [
-          IconButton(icon: const Icon(Icons.settings), onPressed: () => _settings(c))
-        ]),
+        appBar: AppBar(title: Text(wm ? 'WM-MODUS' : 'NEUES SPIEL')),
         body: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
             Expanded(
                 child: ListView(children: [
-              Text('SPIELER', style: TextStyle(letterSpacing: 2, color: kDim)),
-              const SizedBox(height: 6),
-              SegmentedButton<int>(
-                  segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
-                  selected: {players},
-                  onSelectionChanged: (s) => setState(() => players = s.first)),
-              const SizedBox(height: 16),
-              for (var i = 0; i < n; i++)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: TextField(
-                        controller: ctr[i],
-                        decoration: InputDecoration(
-                            labelText: 'Name ${i + 1}',
-                            prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))),
-              const SizedBox(height: 10),
-              Text('STARTPUNKTE', style: TextStyle(letterSpacing: 2, color: kDim)),
-              const SizedBox(height: 6),
-              SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(value: 301, label: Text('301')),
-                    ButtonSegment(value: 501, label: Text('501')),
-                    ButtonSegment(value: 701, label: Text('701'))
-                  ],
-                  selected: {start},
-                  onSelectionChanged: (s) => setState(() => start = s.first)),
-              SwitchListTile(title: const Text('Double-Out'), value: dbl, onChanged: (v) => setState(() => dbl = v)),
-              SwitchListTile(
-                  title: const Text('WM-Modus (Sätze & Legs)'),
-                  subtitle: const Text('wie bei der PDC-WM: 501, Double-Out'),
-                  value: wm,
-                  onChanged: (v) => setState(() => wm = v)),
-              if (wm) ...[
-                const SizedBox(height: 8),
-                Text('RUNDE (SÄTZE: FIRST TO ${_setsTo[round]})', style: TextStyle(letterSpacing: 2, color: kDim)),
-                Wrap(spacing: 8, children: [
-                  for (var i = 0; i < _rounds.length; i++)
-                    ChoiceChip(label: Text(_rounds[i]), selected: round == i, onSelected: (_) => setState(() => round = i))
-                ]),
-                const SizedBox(height: 12),
-                Text('BULL-UP: WER WIRFT ZUERST?', style: TextStyle(letterSpacing: 2, color: kDim)),
-                Wrap(spacing: 8, children: [
-                  for (var i = 0; i < 2; i++)
-                    ChoiceChip(
-                        label: Text(ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()),
-                        selected: first == i,
-                        onSelected: (_) => setState(() => first = i))
-                ]),
-                const SizedBox(height: 8),
-                Text('Satz = first to 3 Legs, Anwurf wechselt je Leg und Satz. Entscheidungssatz: 2 Legs Vorsprung, bei 5:5 Sudden Death.',
-                    style: TextStyle(fontSize: 11, color: kDim)),
+              if (!wm)
+                _sec(
+                    'SPIELER',
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      SegmentedButton<int>(
+                          segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
+                          selected: {players},
+                          onSelectionChanged: (s) => setState(() => players = s.first)),
+                      const SizedBox(height: 12),
+                      _names(),
+                    ]))
+              else
+                _sec('SPIELER', _names()),
+              if (!wm)
+                _sec(
+                    'SPIEL',
+                    Column(children: [
+                      SegmentedButton<int>(
+                          segments: const [
+                            ButtonSegment(value: 301, label: Text('301')),
+                            ButtonSegment(value: 501, label: Text('501')),
+                            ButtonSegment(value: 701, label: Text('701'))
+                          ],
+                          selected: {start},
+                          onSelectionChanged: (s) => setState(() => start = s.first)),
+                      SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Double-Out'),
+                          value: dbl,
+                          onChanged: (v) => setState(() => dbl = v)),
+                    ]))
+              else ...[
+                _sec(
+                    'FORMAT',
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Wrap(spacing: 8, children: [
+                        for (var i = 0; i < _rounds.length; i++)
+                          ChoiceChip(label: Text(_rounds[i]), selected: round == i, onSelected: (_) => setState(() => round = i))
+                      ]),
+                      const SizedBox(height: 10),
+                      Text(
+                          'First to ${_setsTo[round]} Sätze · Satz = first to 3 Legs · 501 · Double-Out\nAnwurf wechselt je Leg und Satz.\nEntscheidungssatz: 2 Legs Vorsprung, bei 5:5 Sudden Death.',
+                          style: TextStyle(fontSize: 11, color: kDim)),
+                    ])),
+                _sec(
+                    'BULL-UP: WER WIRFT ZUERST?',
+                    Wrap(spacing: 8, children: [
+                      for (var i = 0; i < 2; i++)
+                        ChoiceChip(
+                            label: Text(ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()),
+                            selected: first == i,
+                            onSelected: (_) => setState(() => first = i))
+                    ])),
               ],
             ])),
             FilledButton(
@@ -1127,6 +1198,11 @@ class _GameState extends State<GamePage> {
                       '• Zugende: Darts prüfen (antippen = ändern), Darts ziehen, dann den nächsten Spieler antippen.')),
               actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))]));
 
+  Widget _pill2(String t, int n, Color col) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: col.withOpacity(.6))),
+      child: Text('$t $n', style: TextStyle(fontSize: 10, color: kInk, fontWeight: FontWeight.bold)));
+
   Widget _card(int i) {
     final col = teamColors[i % teamColors.length];
     final cur = i == g.cur;
@@ -1157,10 +1233,18 @@ class _GameState extends State<GamePage> {
                 child: Column(children: [
                   Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
-                  if (g.wm) Text('SÄTZE ${g.sets[i]}  LEGS ${g.legs[i]}', style: TextStyle(fontSize: 10, color: kDim)),
+                  if (g.wm)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          _pill2('SÄTZE', g.sets[i], col),
+                          const SizedBox(width: 6),
+                          _pill2('LEGS', g.legs[i], col),
+                        ])),
                   const SizedBox(height: 4),
                   FittedBox(child: DotNum('${g.scores[i]}', kInk)),
-                  Text('Ø ${g.avg(i)}', style: TextStyle(fontSize: 12, color: kDim)),
+                  Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}',
+                      style: TextStyle(fontSize: 11, color: kDim)),
                   const SizedBox(height: 8),
                   Row(children: [
                     for (var k = 0; k < 3; k++)
@@ -1183,7 +1267,7 @@ class _GameState extends State<GamePage> {
 
   List<String> _lines() => [
         for (var i = 0; i < g.names.length; i++)
-          '${g.names[i]}${g.wm ? '   S ${g.sets[i]}  L ${g.legs[i]}' : ''}   Ø ${g.avg(i)}   ${g.thrown[i]} Darts'
+          '${g.names[i]}${g.wm ? '\nSÄTZE ${g.sets[i]} · LEGS ${g.legs[i]}' : ''}\nØ ${g.avg(i)} · ${g.thrown[i]} Darts'
       ];
 
   Widget _win(BuildContext c) => WinScreen(
@@ -1204,7 +1288,7 @@ class _GameState extends State<GamePage> {
       title: g.setWinner != null ? 'SATZ GEWONNEN' : 'LEG GEWONNEN',
       who: g.names[g.legWinner!],
       lines: [
-        for (var i = 0; i < g.names.length; i++) '${g.names[i]}   SÄTZE ${g.sets[i]}   LEGS ${g.legs[i]}   Ø ${g.avg(i)}'
+        for (var i = 0; i < g.names.length; i++) '${g.names[i]}\nSÄTZE ${g.sets[i]} · LEGS ${g.legs[i]} · Ø ${g.avg(i)}'
       ],
       nextLabel: 'NÄCHSTES LEG',
       onUndo: () => setState(g.undo),
@@ -1292,10 +1376,17 @@ class _GameState extends State<GamePage> {
       ]),
       body: Column(children: [
         SizedBox(
-            height: 180,
+            height: g.wm ? 212 : 180,
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (var i = 0; i < g.names.length; i++) _card(i)
             ])),
+        if (g.wm)
+          Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                  'SATZ ${g.sets.fold<int>(0, (a, b) => a + b) + 1} · LEG ${g.legs.fold<int>(0, (a, b) => a + b) + 1}   |   FIRST TO ${g.setsToWin}'
+                  '${g.sets[0] == g.setsToWin - 1 && g.sets[1] == g.setsToWin - 1 ? '   |   ENTSCHEIDUNG' : ''}',
+                  style: TextStyle(fontSize: 11, letterSpacing: 2, color: kDim))),
         Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -1480,9 +1571,11 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
                                     shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
                     const SizedBox(height: 28),
                     for (final l in widget.lines)
-                      Text(l,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.black87, fontSize: 16, height: 1.6)),
+                      Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(l,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.4))),
                     const Spacer(),
                     Row(children: [btn('ZURÜCK', widget.onUndo), btn(widget.nextLabel, widget.onNext), btn('MENÜ', widget.onMenu)]),
                   ]))),
@@ -1509,30 +1602,35 @@ class _Confetti extends CustomPainter {
   bool shouldRepaint(_Confetti o) => o.t != t;
 }
 
-/// Logo: Pfeil in 90er-Farben mit hartem Schatten
+/// Logo: Punktmatrix-Scheibe in 90er-Farben mit hartem Schatten und Pfeil
 class LogoMark extends StatelessWidget {
   final double size;
-  const LogoMark(this.size, {super.key});
+  final bool fixed; // feste dunkle Palette (Startbildschirm)
+  const LogoMark(this.size, {super.key, this.fixed = false});
   @override
-  Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _Logo());
+  Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _Logo(fixed));
 }
 
 class _Logo extends CustomPainter {
+  final bool fixed;
+  _Logo(this.fixed);
   @override
   void paint(Canvas c, Size s) {
     final u = s.width;
+    final ink = fixed ? const Color(0xFFF4F2FA) : kInk, acc = fixed ? const Color(0xFF1AE5D0) : kAccent;
+    final vio = fixed ? const Color(0xFF9A6BFF) : kViolet, pk = fixed ? const Color(0xFFFF5FA2) : teamColors[2];
     for (var pass = 0; pass < 2; pass++) {
       final off = pass == 0 ? u * .035 : 0.0;
       c.save();
       c.translate(u / 2 + off, u / 2 + off);
       c.rotate(-pi / 4);
-      Paint p(Color col) => Paint()..color = pass == 0 ? kInk.withOpacity(.3) : col;
-      c.drawPath(Path()..moveTo(-.46 * u, 0)..lineTo(-.34 * u, -.03 * u)..lineTo(-.34 * u, .03 * u)..close(), p(kInk));
+      Paint p(Color col) => Paint()..color = pass == 0 ? ink.withOpacity(.3) : col;
+      c.drawPath(Path()..moveTo(-.46 * u, 0)..lineTo(-.34 * u, -.03 * u)..lineTo(-.34 * u, .03 * u)..close(), p(ink));
       c.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(kAccent));
-      c.drawRect(Rect.fromLTRB(-.08 * u, -.018 * u, .14 * u, .018 * u), p(kInk));
-      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, -.16 * u)..lineTo(.44 * u, -.16 * u)..lineTo(.34 * u, 0)..close(), p(kViolet));
-      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, .16 * u)..lineTo(.44 * u, .16 * u)..lineTo(.34 * u, 0)..close(), p(teamColors[2]));
+          RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(acc));
+      c.drawRect(Rect.fromLTRB(-.08 * u, -.018 * u, .14 * u, .018 * u), p(ink));
+      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, -.16 * u)..lineTo(.44 * u, -.16 * u)..lineTo(.34 * u, 0)..close(), p(vio));
+      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, .16 * u)..lineTo(.44 * u, .16 * u)..lineTo(.34 * u, 0)..close(), p(pk));
       c.restore();
     }
   }
@@ -1549,7 +1647,7 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin {
-  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 2500))
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))
     ..addStatusListener((st) {
       if (st == AnimationStatus.completed) _go();
     })
@@ -1561,7 +1659,7 @@ class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin
     Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const SetupPage(),
+            pageBuilder: (_, __, ___) => const ModePage(),
             transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
             transitionDuration: const Duration(milliseconds: 250)));
   }
@@ -1577,25 +1675,26 @@ class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin
       behavior: HitTestBehavior.opaque,
       onTap: _go,
       child: Scaffold(
+          backgroundColor: const Color(0xFF09080F),
           body: Center(
               child: AnimatedBuilder(
                   animation: ac,
-                  builder: (_, __) => Column(mainAxisSize: MainAxisSize.min, children: [
-                        Opacity(opacity: min(1.0, ac.value * 5), child: const LogoMark(170)),
+                  builder: (_, __) => Opacity(
+                      opacity: min(1.0, ac.value * 8),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const LogoMark(170, fixed: true),
                         const SizedBox(height: 32),
-                        Opacity(
-                            opacity: min(1.0, max(0.0, (ac.value - .12) * 4)),
-                            child: FittedBox(
-                                child: Text('StanDart',
-                                    style: TextStyle(
-                                        fontSize: 56,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 3,
-                                        color: darkMode.value ? Colors.white : kInk,
-                                        shadows: [
-                                          Shadow(color: kAccent, offset: const Offset(4, 4)),
-                                          Shadow(color: kViolet, offset: const Offset(8, 8))
-                                        ])))),
+                        const FittedBox(
+                            child: Text('StanDart',
+                                style: TextStyle(
+                                    fontSize: 56,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 3,
+                                    color: Colors.white,
+                                    shadows: [
+                                      Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
+                                      Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8))
+                                    ]))),
                       ])))));
 }
 
