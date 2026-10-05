@@ -1481,7 +1481,7 @@ class _GameState extends State<GamePage> {
               child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
     }
 
-    final info = Column(mainAxisSize: MainAxisSize.min, children: [
+    final infoWidget = Column(mainAxisSize: MainAxisSize.min, children: [
       if (g.wm)
         Padding(
             padding: const EdgeInsets.only(top: 2),
