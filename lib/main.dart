@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' show PointMode;
+import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -351,9 +352,10 @@ List<Dart>? checkout(int rem, bool dbl, int left) {
 
 void showSettings(BuildContext c) => showModalBottomSheet(
       context: c,
+      isScrollControlled: true,
       builder: (c) => StatefulBuilder(
           builder: (c, set) => SafeArea(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
                 SwitchListTile(
                     title: const Text('Helles Design'),
                     value: !darkMode.value,
@@ -403,7 +405,7 @@ void showSettings(BuildContext c) => showModalBottomSheet(
                       saveCalib();
                       Navigator.pop(c);
                     }),
-              ]))));
+              ])))));
 
 // ---------- Modus-Auswahl (Startseite) ----------
 class ModePage extends StatelessWidget {
@@ -436,7 +438,7 @@ class ModePage extends StatelessWidget {
               IconButton(icon: const Icon(Icons.settings), onPressed: () => showSettings(c))
             ]),
             body: GridView.count(
-                crossAxisCount: 2,
+                crossAxisCount: MediaQuery.of(c).size.width > MediaQuery.of(c).size.height ? 4 : 2,
                 mainAxisSpacing: 22,
                 crossAxisSpacing: 22,
                 padding: const EdgeInsets.all(24),
@@ -544,16 +546,8 @@ class _SetupState extends State<SetupPage> {
                 _sec('SPIELER', _names()),
               if (!wm)
                 _sec(
-                    'SPIEL',
+                    'SPIEL $start',
                     Column(children: [
-                      SegmentedButton<int>(
-                          segments: const [
-                            ButtonSegment(value: 301, label: Text('301')),
-                            ButtonSegment(value: 501, label: Text('501')),
-                            ButtonSegment(value: 701, label: Text('701'))
-                          ],
-                          selected: {start},
-                          onSelectionChanged: (s) => setState(() => start = s.first)),
                       SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Double-Out'),
@@ -926,12 +920,14 @@ class _GameState extends State<GamePage> {
   bool armed = false, auto = true, busy = false;
   Det? pending;
   Offset? tip;
+  String? camErr;
+  bool camStarting = false;
   List<Offset> blob = [];
   bool locked = false;
   img.Image? prev;
-  bool manual = false;
+  bool manual = true; // Standard: Zahlenfeld, Kamera nur per Wischen
   int mult = 1;
-  final pc = PageController(initialPage: 1);
+  final pc = PageController(initialPage: 0);
   int? drag;
   int seen = 0;
   Gray? refG;
@@ -946,16 +942,45 @@ class _GameState extends State<GamePage> {
     info = calib.length < 4
         ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
         : '${g.names[g.cur]} antippen, um zu starten';
-    g.hold = true;
-    availableCameras().then((cams) async {
-      final cc = CameraController(cams.first, ResolutionPreset.veryHigh, enableAudio: false);
-      await cc.initialize();
-      try {
-        await cc.setFlashMode(FlashMode.off);
-      } catch (_) {}
-      if (mounted) setState(() => ctrl = cc);
-    });
+    g.hold = false; // Manuell: Spielerwechsel automatisch
     timer = Timer.periodic(const Duration(milliseconds: 900), (_) => _tick());
+  }
+
+  Future<void> _initCam() async {
+    if (camStarting) return;
+    camStarting = true;
+    try {
+      final cams = await availableCameras();
+      if (cams.isEmpty) throw 'Keine Kamera gefunden';
+      final cam = cams.firstWhere((c) => c.lensDirection == CameraLensDirection.back, orElse: () => cams.first);
+      Object? last;
+      for (final preset in [ResolutionPreset.veryHigh, ResolutionPreset.high, ResolutionPreset.medium]) {
+        final cc = CameraController(cam, preset, enableAudio: false);
+        try {
+          await cc.initialize();
+          try {
+            await cc.setFlashMode(FlashMode.off);
+          } catch (_) {}
+          if (!mounted) {
+            await cc.dispose();
+            return;
+          }
+          setState(() => ctrl = cc);
+          return;
+        } catch (e) {
+          last = e;
+          await cc.dispose();
+        }
+      }
+      throw last ?? 'Kamera konnte nicht starten';
+    } catch (e) {
+      final t = '$e';
+      camStarting = false;
+      if (!mounted) return;
+      setState(() => camErr = t.toLowerCase().contains('permission') || t.contains('Access')
+          ? 'Kamera-Berechtigung fehlt.\nAndroid-Einstellungen → Apps → StanDart → Berechtigungen → Kamera erlauben.\n\n$t'
+          : 'Kamera konnte nicht starten:\n$t');
+    }
   }
 
   @override
@@ -1136,43 +1161,85 @@ class _GameState extends State<GamePage> {
     });
   }
 
+  /// Eingabe ohne Moduswechsel: Zahl antippen = Single, kleine Felder D/T darunter = Double/Triple.
   Widget _keys(void Function(Dart) onPick, void Function(VoidCallback) refresh, String lastLabel, VoidCallback onLast) {
-    Widget key(String t, VoidCallback f, {bool sel = false}) => Expanded(
+    Widget big(String t, VoidCallback f) => Expanded(
         child: Padding(
             padding: const EdgeInsets.all(3),
-            child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    foregroundColor: sel ? kOnAccent : kInk,
-                    backgroundColor: sel ? kAccent : null,
-                    side: BorderSide(color: sel ? kAccent : kLine, width: 1.5)),
-                onPressed: f,
-                child: FittedBox(child: Text(t, style: const TextStyle(fontSize: 20))))));
-    Widget row(List<Widget> k) => Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: k));
-    return Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(children: [
-          row([
-            key('SINGLE', () => refresh(() => mult = 1), sel: mult == 1),
-            key('DOUBLE', () => refresh(() => mult = 2), sel: mult == 2),
-            key('TRIPLE', () => refresh(() => mult = 3), sel: mult == 3),
-          ]),
-          for (var r = 0; r < 5; r++)
-            row([for (var i = 1; i <= 4; i++) key('${r * 4 + i}', () => onPick(Dart(r * 4 + i, mult)))]),
-          row([
-            key('S-BULL', () => onPick(const Dart(25, 1))),
-            key('D-BULL', () => onPick(const Dart(25, 2))),
-            key('OUT', () => onPick(const Dart(0, 1))),
-            key(lastLabel, onLast),
-          ]),
-        ]));
+            child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: f,
+                child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        color: kInk.withOpacity(.07),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: kLine, width: 1.5)),
+                    child: FittedBox(child: Text(t, style: TextStyle(fontSize: 18, color: kInk)))))));
+    Widget cell(int n) => Expanded(
+        child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                    color: kInk.withOpacity(.07),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: kLine, width: 1.5)),
+                child: Column(children: [
+                  Expanded(
+                      flex: 3,
+                      child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onPick(Dart(n, 1)),
+                          child: Center(
+                              child: FittedBox(
+                                  child: Text('$n',
+                                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: kInk)))))),
+                  Expanded(
+                      flex: 2,
+                      child: Row(children: [
+                        for (final m in [2, 3])
+                          Expanded(
+                              child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => onPick(Dart(n, m)),
+                                  child: Container(
+                                      alignment: Alignment.center,
+                                      color: (m == 2 ? kViolet : teamColors[2]).withOpacity(.28),
+                                      child: Text(m == 2 ? 'D' : 'T',
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kInk))))),
+                      ])),
+                ]))));
+    return LayoutBuilder(builder: (_, k) {
+      final cols = k.maxWidth > k.maxHeight ? 10 : 5;
+      final rows = 20 ~/ cols;
+      return Padding(
+          padding: const EdgeInsets.all(6),
+          child: Column(children: [
+            Expanded(
+                flex: 2,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  big('OUT', () => onPick(const Dart(0, 1))),
+                  big('S-BULL', () => onPick(const Dart(25, 1))),
+                  big('D-BULL', () => onPick(const Dart(25, 2))),
+                  big(lastLabel, onLast),
+                ])),
+            for (var r = 0; r < rows; r++)
+              Expanded(
+                  flex: 4,
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    for (var c = 0; c < cols; c++) cell(r * cols + c + 1)
+                  ])),
+          ]));
+    });
   }
 
   void _edit(int k) => showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (c) => StatefulBuilder(
           builder: (c, set) => SizedBox(
-              height: 430,
+              height: min(430.0, MediaQuery.of(c).size.height * .9),
               child: Column(children: [
                 Padding(
                     padding: const EdgeInsets.all(10),
@@ -1203,7 +1270,35 @@ class _GameState extends State<GamePage> {
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: col.withOpacity(.6))),
       child: Text('$t $n', style: TextStyle(fontSize: 10, color: kInk, fontWeight: FontWeight.bold)));
 
-  Widget _card(int i) {
+  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit) => Row(children: [
+        Expanded(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}${g.wm ? '  S${g.sets[i]} L${g.legs[i]}' : ''}',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, letterSpacing: 1, color: col)),
+          Expanded(child: FittedBox(child: DotNum('${g.scores[i]}', kInk))),
+          Text('Ø ${g.avg(i)}', style: TextStyle(fontSize: 10, color: kDim)),
+        ])),
+        const SizedBox(width: 6),
+        SizedBox(
+            width: 52,
+            child: Column(children: [
+              for (var k = 0; k < 3; k++)
+                Expanded(
+                    child: GestureDetector(
+                        onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                        child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                            child: k < ds.length
+                                ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 11, color: kInk)))
+                                : null)))
+            ])),
+      ]);
+
+  Widget _card(int i, {bool compact = false}) {
     final col = teamColors[i % teamColors.length];
     final cur = i == g.cur;
     final ds = cur ? g.darts : g.last[i];
@@ -1223,14 +1318,14 @@ class _GameState extends State<GamePage> {
               }
             },
             child: Container(
-                margin: const EdgeInsets.fromLTRB(5, 5, 9, 9),
-                padding: const EdgeInsets.all(10),
+                margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
+                padding: EdgeInsets.all(compact ? 6 : 10),
                 decoration: BoxDecoration(
                     color: kCard,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: cur || (g.held && i == nextI) ? col : kLine, width: cur ? 2 : 1.5),
                     boxShadow: cur ? [BoxShadow(color: col, offset: const Offset(4, 4))] : null),
-                child: Column(children: [
+                child: compact ? _compact(i, col, cur, ds, canEdit) : Column(children: [
                   Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
                   if (g.wm)
@@ -1273,6 +1368,7 @@ class _GameState extends State<GamePage> {
   Widget _win(BuildContext c) => WinScreen(
       g: g,
       title: 'GEWINNER',
+      sound: true,
       who: g.winner!,
       lines: _lines(),
       nextLabel: 'REVANCHE',
@@ -1304,10 +1400,26 @@ class _GameState extends State<GamePage> {
         Padding(padding: const EdgeInsets.all(8), child: Text(info, textAlign: TextAlign.center)),
         Expanded(
             child: cc == null
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: camErr == null
+                        ? const CircularProgressIndicator()
+                        : Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              Text(camErr!, textAlign: TextAlign.center, style: TextStyle(color: kDim, fontSize: 12)),
+                              const SizedBox(height: 12),
+                              OutlinedButton(
+                                  onPressed: () {
+                                    setState(() => camErr = null);
+                                    _initCam();
+                                  },
+                                  child: const Text('Erneut versuchen')),
+                            ])))
                 : Center(
                     child: AspectRatio(
-                        aspectRatio: 1 / cc.value.aspectRatio,
+                        aspectRatio: MediaQuery.of(context).size.width > MediaQuery.of(context).size.height
+                            ? cc.value.aspectRatio
+                            : 1 / cc.value.aspectRatio,
                         child: LayoutBuilder(builder: (_, k) {
                           final sz = Size(k.maxWidth, k.maxHeight);
                           // Listener statt Pan: Punkte ziehen, aber Wischen zwischen den Seiten bleibt möglich
@@ -1369,6 +1481,78 @@ class _GameState extends State<GamePage> {
               child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
     }
 
+    final info = Column(mainAxisSize: MainAxisSize.min, children: [
+      if (g.wm)
+        Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+                'SATZ ${g.sets.fold<int>(0, (a, b) => a + b) + 1} · LEG ${g.legs.fold<int>(0, (a, b) => a + b) + 1}   |   FIRST TO ${g.setsToWin}'
+                '${g.sets[0] == g.setsToWin - 1 && g.sets[1] == g.setsToWin - 1 ? '   |   ENTSCHEIDUNG' : ''}',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, letterSpacing: 2, color: kDim))),
+      Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            if (g.msg != null)
+              const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
+            if (route != null) ...[
+              Text('CHECKOUT  ', style: TextStyle(color: kDim, letterSpacing: 2, fontSize: 11)),
+              Text(route.map((d) => d.label).join(' · '), style: TextStyle(color: kViolet, fontSize: 18)),
+            ],
+          ])),
+    ]);
+    final pager = PageView(
+      controller: pc,
+      physics: drag != null ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+      onPageChanged: (i) => setState(() {
+        manual = i == 0;
+        g.hold = !manual;
+        if (manual) g.confirmTurn();
+        if (!manual) {
+          armed = false;
+          base = null;
+          pending = null;
+          info = calib.length < 4
+              ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
+              : '${g.names[g.cur]} antippen für Referenzbild';
+          if (ctrl == null) _initCam(); // Kamera erst beim ersten Wischen starten
+        }
+      }),
+      children: [
+        _keys((d) {
+          mult = 1;
+          _add(d);
+        }, setState, '↶', () => setState(g.undo)),
+        _cameraPage(ctrl)
+      ],
+    );
+    final size = MediaQuery.of(c).size;
+    if (size.width > size.height) {
+      // Querformat: links Spielstände, rechts Eingabe/Kamera
+      return Scaffold(
+          body: SafeArea(
+              child: Row(children: [
+        SizedBox(
+            width: size.width * .38,
+            child: Column(children: [
+              Expanded(child: Column(children: [for (var i = 0; i < g.names.length; i++) _card(i, compact: true)])),
+              info,
+            ])),
+        Expanded(
+            child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            pill(0, 'MANUELL'),
+            pill(1, 'KAMERA'),
+            if (!manual) ...[
+              const SizedBox(width: 8),
+              const Text('Auto'),
+              Switch(value: auto, onChanged: (v) => setState(() => auto = v))
+            ],
+          ]),
+          Expanded(child: pager),
+        ])),
+      ])));
+    }
     return Scaffold(
       appBar: AppBar(title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'), actions: [
         if (!manual) const Text('Auto'),
@@ -1380,44 +1564,9 @@ class _GameState extends State<GamePage> {
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (var i = 0; i < g.names.length; i++) _card(i)
             ])),
-        if (g.wm)
-          Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                  'SATZ ${g.sets.fold<int>(0, (a, b) => a + b) + 1} · LEG ${g.legs.fold<int>(0, (a, b) => a + b) + 1}   |   FIRST TO ${g.setsToWin}'
-                  '${g.sets[0] == g.setsToWin - 1 && g.sets[1] == g.setsToWin - 1 ? '   |   ENTSCHEIDUNG' : ''}',
-                  style: TextStyle(fontSize: 11, letterSpacing: 2, color: kDim))),
-        Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              if (g.msg != null)
-                const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
-              if (route != null) ...[
-                Text('CHECKOUT  ', style: TextStyle(color: kDim, letterSpacing: 2, fontSize: 11)),
-                Text(route.map((d) => d.label).join(' · '), style: TextStyle(color: kViolet, fontSize: 18)),
-              ],
-            ])),
+        info,
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
-        Expanded(
-            child: PageView(
-          controller: pc,
-          physics: drag != null ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
-          onPageChanged: (i) => setState(() {
-            manual = i == 0;
-            g.hold = !manual;
-            if (manual) g.confirmTurn();
-            if (!manual) {
-              armed = false;
-              base = null;
-              pending = null;
-              info = '${g.names[g.cur]} antippen für Referenzbild';
-            }
-          }),
-          children: [_keys((d) {
-            mult = 1;
-            _add(d);
-          }, setState, '↶', () => setState(g.undo)), _cameraPage(ctrl)],
-        )),
+        Expanded(child: pager),
       ]),
     );
   }
@@ -1504,8 +1653,10 @@ class WinScreen extends StatefulWidget {
   final String title, who, nextLabel;
   final List<String> lines;
   final VoidCallback onUndo, onNext, onMenu;
+  final bool sound; // Jubel-Musik (assets/win.mp3)
   const WinScreen(
       {super.key,
+      this.sound = false,
       required this.g,
       required this.title,
       required this.who,
@@ -1520,8 +1671,23 @@ class WinScreen extends StatefulWidget {
 
 class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
   late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+  AudioPlayer? _ap;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.sound && soundOn.value) {
+      try {
+        _ap = AudioPlayer();
+        _ap!.play(AssetSource('win.mp3')).catchError((_) {});
+      } catch (_) {}
+    }
+  }
+
   @override
   void dispose() {
+    _ap?.stop();
+    _ap?.dispose();
     ac.dispose();
     super.dispose();
   }
@@ -1545,7 +1711,12 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
           Positioned.fill(
               child: AnimatedBuilder(animation: ac, builder: (_, __) => CustomPaint(painter: _Confetti(ac.value)))),
           SafeArea(
-              child: Padding(
+              child: LayoutBuilder(
+                  builder: (_, k) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: k.maxHeight),
+                          child: IntrinsicHeight(
+                              child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                     const Spacer(),
@@ -1578,7 +1749,7 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
                               style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.4))),
                     const Spacer(),
                     Row(children: [btn('ZURÜCK', widget.onUndo), btn(widget.nextLabel, widget.onNext), btn('MENÜ', widget.onMenu)]),
-                  ]))),
+                  ]))))))),
         ]));
   }
 }
@@ -1647,7 +1818,7 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin {
-  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 6500))
     ..addStatusListener((st) {
       if (st == AnimationStatus.completed) _go();
     })
@@ -1680,9 +1851,9 @@ class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin
               child: AnimatedBuilder(
                   animation: ac,
                   builder: (_, __) => Opacity(
-                      opacity: min(1.0, ac.value * 8),
+                      opacity: min(1.0, ac.value * 10),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        const LogoMark(170, fixed: true),
+                        LogoMark(MediaQuery.of(c).size.height < 500 ? 110 : 170, fixed: true),
                         const SizedBox(height: 32),
                         const FittedBox(
                             child: Text('StanDart',
