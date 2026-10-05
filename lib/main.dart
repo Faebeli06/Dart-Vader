@@ -1481,7 +1481,7 @@ class _GameState extends State<GamePage> {
               child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
     }
 
-    final infoWidget = Column(mainAxisSize: MainAxisSize.min, children: [
+    final infoColumn = Column(mainAxisSize: MainAxisSize.min, children: [
       if (g.wm)
         Padding(
             padding: const EdgeInsets.only(top: 2),
@@ -1536,7 +1536,7 @@ class _GameState extends State<GamePage> {
             width: size.width * .38,
             child: Column(children: [
               Expanded(child: Column(children: [for (var i = 0; i < g.names.length; i++) _card(i, compact: true)])),
-              info,
+              infoColumn,
             ])),
         Expanded(
             child: Column(children: [
@@ -1564,7 +1564,7 @@ class _GameState extends State<GamePage> {
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (var i = 0; i < g.names.length; i++) _card(i)
             ])),
-        info,
+        infoColumn,
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
         Expanded(child: pager),
       ]),
