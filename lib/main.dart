@@ -11,24 +11,42 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
-final darkMode = ValueNotifier<bool>(true), vibOn = ValueNotifier<bool>(true), soundOn = ValueNotifier<bool>(true);
-final diagOn = ValueNotifier<bool>(false), autoFit = ValueNotifier<bool>(true);
+final darkMode = ValueNotifier<bool>(true);
+final vibOn = ValueNotifier<bool>(true);
+final soundOn = ValueNotifier<bool>(true);
+final diagOn = ValueNotifier<bool>(false);
+final autoFit = ValueNotifier<bool>(true);
 String diagWhy = '';
-Color kBg = const Color(0xFF09080F), kCard = const Color(0xFF14121C), kLine = const Color(0xFF2B2838);
-Color kInk = const Color(0xFFF4F2FA), kDim = const Color(0xFF9A97A8), kOnAccent = Colors.black;
-Color kAccent = const Color(0xFF1AE5D0), kViolet = const Color(0xFF9A6BFF);
+Color kBg = const Color(0xFF09080F);
+Color kCard = const Color(0xFF14121C);
+Color kLine = const Color(0xFF2B2838);
+Color kInk = const Color(0xFFF4F2FA);
+Color kDim = const Color(0xFF9A97A8);
+Color kOnAccent = Colors.black;
+Color kAccent = const Color(0xFF1AE5D0);
+Color kViolet = const Color(0xFF9A6BFF);
 List<Color> teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
 
 void applyTheme(bool d) {
   if (d) {
-    kBg = const Color(0xFF09080F); kCard = const Color(0xFF14121C); kLine = const Color(0xFF2B2838);
-    kInk = const Color(0xFFF4F2FA); kDim = const Color(0xFF9A97A8); kOnAccent = Colors.black;
-    kAccent = const Color(0xFF1AE5D0); kViolet = const Color(0xFF9A6BFF);
+    kBg = const Color(0xFF09080F);
+    kCard = const Color(0xFF14121C);
+    kLine = const Color(0xFF2B2838);
+    kInk = const Color(0xFFF4F2FA);
+    kDim = const Color(0xFF9A97A8);
+    kOnAccent = Colors.black;
+    kAccent = const Color(0xFF1AE5D0);
+    kViolet = const Color(0xFF9A6BFF);
     teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
   } else {
-    kBg = const Color(0xFFF1E7D3); kCard = const Color(0xFFFBF5E6); kLine = const Color(0xFFC9BB9C);
-    kInk = const Color(0xFF1B1A22); kDim = const Color(0xFF6B6558); kOnAccent = Colors.white;
-    kAccent = const Color(0xFF2563EB); kViolet = const Color(0xFFE63B2E);
+    kBg = const Color(0xFFF1E7D3);
+    kCard = const Color(0xFFFBF5E6);
+    kLine = const Color(0xFFC9BB9C);
+    kInk = const Color(0xFF1B1A22);
+    kDim = const Color(0xFF6B6558);
+    kOnAccent = Colors.white;
+    kAccent = const Color(0xFF2563EB);
+    kViolet = const Color(0xFFE63B2E);
     teamColors = [kAccent, kViolet, const Color(0xFFFF8A00), const Color(0xFFE0A800)];
   }
 }
@@ -47,23 +65,37 @@ Future<void> saveCalib() async {
   }
 }
 
-ThemeData appTheme(bool d) => ThemeData(
+ThemeData appTheme(bool d) {
+  return ThemeData(
     brightness: d ? Brightness.dark : Brightness.light,
     useMaterial3: true,
     fontFamily: 'monospace',
     scaffoldBackgroundColor: Colors.transparent,
     colorScheme: (d ? ColorScheme.dark() : ColorScheme.light()).copyWith(primary: kAccent, secondary: kViolet, surface: kBg),
     appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        scrolledUnderElevation: 0,
-        foregroundColor: kInk,
-        titleTextStyle: TextStyle(fontFamily: 'monospace', fontSize: 16, letterSpacing: 2, color: kInk)),
+      backgroundColor: Colors.transparent,
+      scrolledUnderElevation: 0,
+      foregroundColor: kInk,
+      titleTextStyle: TextStyle(fontFamily: 'monospace', fontSize: 16, letterSpacing: 2, color: kInk),
+    ),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: kCard),
     filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-            backgroundColor: kAccent, foregroundColor: kOnAccent, shape: StadiumBorder(), minimumSize: Size.fromHeight(52))),
+      style: FilledButton.styleFrom(
+        backgroundColor: kAccent,
+        foregroundColor: kOnAccent,
+        shape: const StadiumBorder(),
+        minimumSize: const Size.fromHeight(52),
+      ),
+    ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(shape: StadiumBorder(), foregroundColor: kInk, side: BorderSide(color: kLine))));
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        foregroundColor: kInk,
+        side: BorderSide(color: kLine),
+      ),
+    ),
+  );
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,16 +110,18 @@ Future<void> main() async {
     calib = [for (final s in cs) Offset(double.parse(s.split(',')[0]), double.parse(s.split(',')[1]))];
   }
   runApp(ValueListenableBuilder<bool>(
-      valueListenable: darkMode,
-      builder: (_, d, __) {
-        applyTheme(d);
-        return MaterialApp(
-            title: 'StanDart',
-            debugShowCheckedModeBanner: false,
-            builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
-            theme: appTheme(d),
-            home: const SplashPage());
-      }));
+    valueListenable: darkMode,
+    builder: (_, d, __) {
+      applyTheme(d);
+      return MaterialApp(
+        title: 'StanDart',
+        debugShowCheckedModeBanner: false,
+        builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
+        theme: appTheme(d),
+        home: const SplashPage(),
+      );
+    },
+  ));
 }
 
 const order = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
@@ -96,11 +130,12 @@ class Dart {
   final int n, m;
   const Dart(this.n, this.m);
   int get points => n * m;
-  String get label => n == 0
-      ? 'OUT'
-      : n == 25
-          ? (m == 2 ? 'D-Bull' : 'S-Bull')
-          : '${m == 3 ? 'T' : m == 2 ? 'D' : ''}$n';
+  String get label {
+    if (n == 0) return 'OUT';
+    if (n == 25) return m == 2 ? 'D-Bull' : 'S-Bull';
+    final pre = m == 3 ? 'T' : (m == 2 ? 'D' : '');
+    return '$pre$n';
+  }
 }
 
 Dart fromBoard(double dx, double dy) {
@@ -119,19 +154,29 @@ class Game {
   final List<String> names;
   final int start;
   final bool dbl;
-  late List<int> scores, thrown;
+  late List<int> scores;
+  late List<int> thrown;
   late List<List<Dart>> last;
-  int cur = 0, turnStart;
+  int cur = 0;
+  int turnStart;
   List<Dart> darts = [];
-  String? winner, msg;
-  bool hold = false, held = false;
-  final bool wm, tieBreak;
+  String? winner;
+  String? msg;
+  bool hold = false;
+  bool held = false;
+  final bool wm;
+  final bool tieBreak;
   final int setsToWin;
-  late List<int> legs, sets, done;
-  int legStart = 0, setStart = 0;
-  int? legWinner, setWinner;
-  Game(this.names, this.start, this.dbl, {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0})
-      : turnStart = start {
+  late List<int> legs;
+  late List<int> sets;
+  late List<int> done;
+  int legStart = 0;
+  int setStart = 0;
+  int? legWinner;
+  int? setWinner;
+  final hist = <List<Object?>>[];
+
+  Game(this.names, this.start, this.dbl, {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0}) : turnStart = start {
     cur = first;
     legStart = first;
     setStart = first;
@@ -143,8 +188,21 @@ class Game {
     last = List.generate(names.length, (_) => <Dart>[]);
     turnStart = scores[cur];
   }
-  String avg(int i) => thrown[i] == 0 ? '–' : ((done[i] + start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
-  int _sum() => darts.fold<int>(0, (s, d) => s + d.points);
+
+  String avg(int i) {
+    if (thrown[i] == 0) return '–';
+    final v = (done[i] + start - scores[i]) / thrown[i] * 3;
+    return v.toStringAsFixed(1);
+  }
+
+  int _sum() {
+    var s = 0;
+    for (final d in darts) {
+      s += d.points;
+    }
+    return s;
+  }
+
   void add(Dart d) {
     if (winner != null || held || legWinner != null) return;
     _save();
@@ -198,7 +256,7 @@ class Game {
     setWinner = null;
     final deciding = sets[0] == setsToWin - 1 && sets[1] == setsToWin - 1;
     final o = legs[1 - w];
-    final won = deciding && tieBreak ? (legs[w] >= 3 && legs[w] - o >= 2) : legs[w] >= 3;
+    final won = (deciding && tieBreak) ? (legs[w] >= 3 && legs[w] - o >= 2) : legs[w] >= 3;
     if (won) {
       sets[w]++;
       setWinner = w;
@@ -227,25 +285,26 @@ class Game {
     turnStart = start;
   }
 
-  final hist = <List<Object?>>[];
-  void _save() => hist.add([
-        List<int>.of(scores),
-        List<int>.of(thrown),
-        [for (final l in last) List<Dart>.of(l)],
-        cur,
-        turnStart,
-        List<Dart>.of(darts),
-        winner,
-        msg,
-        held,
-        List<int>.of(legs),
-        List<int>.of(sets),
-        List<int>.of(done),
-        legStart,
-        setStart,
-        legWinner,
-        setWinner
-      ]);
+  void _save() {
+    hist.add([
+      List<int>.of(scores),
+      List<int>.of(thrown),
+      [for (final l in last) List<Dart>.of(l)],
+      cur,
+      turnStart,
+      List<Dart>.of(darts),
+      winner,
+      msg,
+      held,
+      List<int>.of(legs),
+      List<int>.of(sets),
+      List<int>.of(done),
+      legStart,
+      setStart,
+      legWinner,
+      setWinner,
+    ]);
+  }
 
   void confirmTurn() {
     if (held) {
@@ -307,7 +366,7 @@ int _cost(List<Dart> r, bool dbl) {
     } else if (dbl) {
       c += d.n == 25 ? 12 : pref.indexOf(d.n);
     } else {
-      c += d.m == 1 ? 0 : d.m == 2 ? 1 : 3;
+      c += d.m == 1 ? 0 : (d.m == 2 ? 1 : 3);
     }
   }
   return c;
@@ -341,7 +400,6 @@ List<Dart>? checkout(int rem, bool dbl, int left) {
           go(r2, [...acc, d]);
         }
       }
-
       go(rem, []);
       if (best != null) return best;
     }
@@ -349,66 +407,83 @@ List<Dart>? checkout(int rem, bool dbl, int left) {
   });
 }
 
-void showSettings(BuildContext c) => showModalBottomSheet(
-      context: c,
-      isScrollControlled: true,
-      builder: (c) => StatefulBuilder(
-          builder: (c, set) => SafeArea(
-                  child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                SwitchListTile(
-                    title: Text(darkMode.value ? 'Dunkles Design' : 'Helles Design'),
-                    value: darkMode.value,
-                    onChanged: (v) async {
-                      darkMode.value = v;
-                      set(() {});
-                      (await SharedPreferences.getInstance()).setBool('dark', v);
-                    }),
-                SwitchListTile(
-                    title: const Text('Vibration'),
-                    value: vibOn.value,
-                    onChanged: (v) async {
-                      vibOn.value = v;
-                      set(() {});
-                      (await SharedPreferences.getInstance()).setBool('vib', v);
-                    }),
-                SwitchListTile(
-                    title: const Text('Ton'),
-                    value: soundOn.value,
-                    onChanged: (v) async {
-                      soundOn.value = v;
-                      set(() {});
-                      (await SharedPreferences.getInstance()).setBool('snd', v);
-                    }),
-                SwitchListTile(
-                    title: const Text('Auto-Feinabgleich der Scheibe'),
-                    value: autoFit.value,
-                    onChanged: (v) async {
-                      autoFit.value = v;
-                      set(() {});
-                      (await SharedPreferences.getInstance()).setBool('fit', v);
-                    }),
-                SwitchListTile(
-                    title: const Text('Diagnose-Modus'),
-                    subtitle: const Text('zeigt erkannte Flecken und Gründe'),
-                    value: diagOn.value,
-                    onChanged: (v) async {
-                      diagOn.value = v;
-                      set(() {});
-                      (await SharedPreferences.getInstance()).setBool('diag', v);
-                    }),
-                ListTile(
-                    leading: const Icon(Icons.crop_free),
-                    title: const Text('Kalibrierung zurücksetzen'),
-                    onTap: () {
-                      calib = [];
-                      saveCalib();
-                      Navigator.pop(c);
-                    }),
-              ])))));
+void showSettings(BuildContext c) {
+  showModalBottomSheet(
+    context: c,
+    isScrollControlled: true,
+    builder: (ctx) {
+      return StatefulBuilder(builder: (ctx, set) {
+        return SafeArea(child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          SwitchListTile(
+            title: Text(darkMode.value ? 'Dunkles Design' : 'Helles Design'),
+            value: darkMode.value,
+            onChanged: (v) async {
+              darkMode.value = v;
+              set(() {});
+              final p = await SharedPreferences.getInstance();
+              p.setBool('dark', v);
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Vibration'),
+            value: vibOn.value,
+            onChanged: (v) async {
+              vibOn.value = v;
+              set(() {});
+              final p = await SharedPreferences.getInstance();
+              p.setBool('vib', v);
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Ton'),
+            value: soundOn.value,
+            onChanged: (v) async {
+              soundOn.value = v;
+              set(() {});
+              final p = await SharedPreferences.getInstance();
+              p.setBool('snd', v);
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Auto-Feinabgleich der Scheibe'),
+            value: autoFit.value,
+            onChanged: (v) async {
+              autoFit.value = v;
+              set(() {});
+              final p = await SharedPreferences.getInstance();
+              p.setBool('fit', v);
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Diagnose-Modus'),
+            subtitle: const Text('zeigt erkannte Flecken und Gründe'),
+            value: diagOn.value,
+            onChanged: (v) async {
+              diagOn.value = v;
+              set(() {});
+              final p = await SharedPreferences.getInstance();
+              p.setBool('diag', v);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.crop_free),
+            title: const Text('Kalibrierung zurücksetzen'),
+            onTap: () {
+              calib = [];
+              saveCalib();
+              Navigator.pop(ctx);
+            },
+          ),
+        ])));
+      });
+    },
+  );
+}
 
 class Song {
   final int id;
-  final String title, artist;
+  final String title;
+  final String artist;
   const Song(this.id, this.title, this.artist);
   String toJson() => jsonEncode({'id': id, 't': title, 'a': artist});
   static Song? from(String? s) {
@@ -433,8 +508,9 @@ Future<dynamic> deezerJson(String url) async {
   }
 }
 
-Future<Song?> pickSong(BuildContext c) =>
-    showModalBottomSheet<Song>(context: c, isScrollControlled: true, builder: (_) => const _SongPicker());
+Future<Song?> pickSong(BuildContext c) {
+  return showModalBottomSheet<Song>(context: c, isScrollControlled: true, builder: (_) => const _SongPicker());
+}
 
 class _SongPicker extends StatefulWidget {
   const _SongPicker();
@@ -475,10 +551,13 @@ class _SongPickerState extends State<_SongPicker> {
     });
     try {
       final j = await deezerJson('https://api.deezer.com/search?q=${Uri.encodeQueryComponent(t)}&limit=20');
-      final list = [
-        for (final e in (j['data'] as List? ?? []))
-          if (e is Map<String, dynamic> && '${e['preview'] ?? ''}'.isNotEmpty) e
-      ];
+      final list = <Map<String, dynamic>>[];
+      final data = j['data'] as List? ?? [];
+      for (final e in data) {
+        if (e is Map<String, dynamic> && '${e['preview'] ?? ''}'.isNotEmpty) {
+          list.add(e);
+        }
+      }
       if (mounted) {
         setState(() {
           res = list;
@@ -497,89 +576,111 @@ class _SongPickerState extends State<_SongPicker> {
   }
 
   @override
-  Widget build(BuildContext c) => SafeArea(
+  Widget build(BuildContext c) {
+    return SafeArea(
       child: Padding(
-          padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + MediaQuery.of(c).viewInsets.bottom),
-          child: SizedBox(
-              height: MediaQuery.of(c).size.height * .75,
-              child: Column(children: [
-                TextField(
-                    controller: q,
-                    autofocus: true,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => search(),
-                    decoration: InputDecoration(
-                        labelText: 'Song oder Interpret suchen (Deezer)',
-                        suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)))),
-                const SizedBox(height: 8),
-                if (busy) const LinearProgressIndicator(),
-                if (err != null) Padding(padding: const EdgeInsets.all(8), child: Text(err!, style: TextStyle(color: kDim))),
-                Expanded(
-                    child: ListView(children: [
-                  for (final e in res)
-                    ListTile(
-                        title: Text('${e['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text('${(e['artist'] as Map?)?['name'] ?? ''}', maxLines: 1),
-                        trailing: IconButton(
-                            icon: Icon(playing == e['id'] ? Icons.stop : Icons.play_arrow),
-                            onPressed: () async {
-                              if (playing == e['id']) {
-                                await ap.stop();
-                                setState(() => playing = null);
-                                return;
-                              }
-                              setState(() => playing = e['id'] as int);
-                              try {
-                                await ap.play(UrlSource('${e['preview']}'));
-                              } catch (_) {}
-                            }),
-                        onTap: () => Navigator.pop(
-                            c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'))),
-                ])),
-              ]))));
+        padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + MediaQuery.of(c).viewInsets.bottom),
+        child: SizedBox(
+          height: MediaQuery.of(c).size.height * .75,
+          child: Column(children: [
+            TextField(
+              controller: q,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => search(),
+              decoration: InputDecoration(
+                labelText: 'Song oder Interpret suchen (Deezer)',
+                suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (busy) const LinearProgressIndicator(),
+            if (err != null) Padding(padding: const EdgeInsets.all(8), child: Text(err!, style: TextStyle(color: kDim))),
+            Expanded(
+              child: ListView(children: [
+                for (final e in res)
+                  ListTile(
+                    title: Text('${e['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${(e['artist'] as Map?)?['name'] ?? ''}', maxLines: 1),
+                    trailing: IconButton(
+                      icon: Icon(playing == e['id'] ? Icons.stop : Icons.play_arrow),
+                      onPressed: () async {
+                        if (playing == e['id']) {
+                          await ap.stop();
+                          setState(() => playing = null);
+                          return;
+                        }
+                        setState(() => playing = e['id'] as int);
+                        try {
+                          await ap.play(UrlSource('${e['preview']}'));
+                        } catch (_) {}
+                      },
+                    ),
+                    onTap: () {
+                      Navigator.pop(c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'));
+                    },
+                  ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
 
 class ModePage extends StatelessWidget {
   const ModePage({super.key});
-  Widget tile(BuildContext c, String big, String small, Color col, VoidCallback f) {
+
+  Widget tile(String big, String small, Color col, VoidCallback f) {
     final txt = col.computeLuminance() > .35 ? Colors.black : Colors.white;
     return GestureDetector(
-        onTap: f,
-        child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: col,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [BoxShadow(color: kInk.withValues(alpha: .3), offset: const Offset(6, 6))]),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(small, style: TextStyle(color: txt, fontSize: 11, letterSpacing: 2)),
-              const Spacer(),
-              FittedBox(child: Text(big, style: TextStyle(color: txt, fontSize: 60, fontWeight: FontWeight.w900))),
-            ])));
+      onTap: f,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: col,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [BoxShadow(color: kInk.withValues(alpha: .3), offset: const Offset(6, 6))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(small, style: TextStyle(color: txt, fontSize: 11, letterSpacing: 2)),
+          const Spacer(),
+          FittedBox(child: Text(big, style: TextStyle(color: txt, fontSize: 60, fontWeight: FontWeight.w900))),
+        ]),
+      ),
+    );
   }
 
   @override
-  Widget build(BuildContext c) => ValueListenableBuilder<bool>(
+  Widget build(BuildContext c) {
+    return ValueListenableBuilder<bool>(
       valueListenable: darkMode,
       builder: (c, _, __) {
-        void go(int? pts, bool wm) =>
-            Navigator.push(c, MaterialPageRoute(builder: (_) => SetupPage(startPts: pts, wm: wm)));
+        void go(int? pts, bool wm) {
+          Navigator.push(c, MaterialPageRoute(builder: (_) => SetupPage(startPts: pts, wm: wm)));
+        }
         return Scaffold(
-            appBar: AppBar(title: const Text('MODUS WÄHLEN'), actions: [
-              IconButton(icon: const Icon(Icons.settings), onPressed: () => showSettings(c))
-            ]),
-            body: GridView.count(
-                crossAxisCount: MediaQuery.of(c).size.width > MediaQuery.of(c).size.height ? 4 : 2,
-                mainAxisSpacing: 22,
-                crossAxisSpacing: 22,
-                padding: const EdgeInsets.all(24),
-                children: [
-                  tile(c, '501', 'FREIES SPIEL', teamColors[0], () => go(501, false)),
-                  tile(c, '301', 'FREIES SPIEL', teamColors[1], () => go(301, false)),
-                  tile(c, '701', 'FREIES SPIEL', teamColors[2], () => go(701, false)),
-                  tile(c, 'WM', 'SÄTZE & LEGS', teamColors[3], () => go(null, true)),
-                ]));
-      });
+          appBar: AppBar(title: const Text('MODUS WÄHLEN'), actions: [
+            IconButton(icon: const Icon(Icons.settings), onPressed: () => showSettings(c)),
+          ]),
+          body: GridView.count(
+            crossAxisCount: MediaQuery.of(c).size.width > MediaQuery.of(c).size.height ? 4 : 2,
+            mainAxisSpacing: 22,
+            crossAxisSpacing: 22,
+            padding: const EdgeInsets.all(24),
+            children: [
+              tile('501', 'FREIES SPIEL', teamColors[0], () => go(501, false)),
+              tile('301', 'FREIES SPIEL', teamColors[1], () => go(301, false)),
+              tile('701', 'FREIES SPIEL', teamColors[2], () => go(701, false)),
+              tile('WM', 'SÄTZE & LEGS', teamColors[3], () => go(null, true)),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 class SetupPage extends StatefulWidget {
@@ -591,55 +692,70 @@ class SetupPage extends StatefulWidget {
 }
 
 class _SetupState extends State<SetupPage> {
-  int players = 2, start = 501, round = 1, first = 0;
-  bool dbl = true, wm = false;
+  int players = 2;
+  int start = 501;
+  int round = 1;
+  int first = 0;
+  bool dbl = true;
+  bool wm = false;
   static const _rounds = ['Runde 1 (kein Tie-Break)', 'Runde 2', 'Runde 3/4', 'Viertelfinale', 'Halbfinale', 'Finale'];
   static const _setsTo = [3, 3, 4, 5, 6, 7];
-  int get n => wm ? 2 : players;
   final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
   final songs = List<Song?>.filled(4, null);
 
-  Widget _sec(String t, Widget child) => Container(
+  int get n => wm ? 2 : players;
+
+  Widget _sec(String t, Widget child) {
+    return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-          color: kCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: kLine, width: 1.5)),
+      decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(18), border: Border.all(color: kLine, width: 1.5)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(t, style: TextStyle(letterSpacing: 2, color: kDim, fontSize: 12)),
         const SizedBox(height: 10),
-        child
-      ]));
+        child,
+      ]),
+    );
+  }
 
-  Widget _songRow(int i) => Padding(
+  Widget _songRow(int i) {
+    return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(children: [
         Expanded(
-            child: OutlinedButton.icon(
-                onPressed: () async {
-                  final s = await pickSong(context);
-                  if (s != null) setState(() => songs[i] = s);
-                },
-                icon: const Icon(Icons.music_note, size: 18),
-                label: Text(songs[i] == null ? 'EINLAUFSONG WÄHLEN' : '${songs[i]!.title} – ${songs[i]!.artist}',
-                    maxLines: 1, overflow: TextOverflow.ellipsis))),
-        if (songs[i] != null)
-          IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => songs[i] = null)),
-      ]));
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              final s = await pickSong(context);
+              if (s != null) setState(() => songs[i] = s);
+            },
+            icon: const Icon(Icons.music_note, size: 18),
+            label: Text(songs[i] == null ? 'EINLAUFSONG WÄHLEN' : '${songs[i]!.title} – ${songs[i]!.artist}', maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        if (songs[i] != null) IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => songs[i] = null)),
+      ]),
+    );
+  }
 
-  Widget _names() => Column(children: [
-        for (var i = 0; i < n; i++) ...[
-          Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: TextField(
-                  controller: ctr[i],
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                      labelText: 'Name ${i + 1}',
-                      prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))),
-          if (wm) _songRow(i),
-        ]
-      ]);
+  Widget _names() {
+    return Column(children: [
+      for (var i = 0; i < n; i++) ...[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TextField(
+            controller: ctr[i],
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Name ${i + 1}',
+              prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+        ),
+        if (wm) _songRow(i),
+      ],
+    ]);
+  }
 
   @override
   void initState() {
@@ -648,7 +764,7 @@ class _SetupState extends State<SetupPage> {
     if (widget.startPts != null) start = widget.startPts!;
     SharedPreferences.getInstance().then((p) {
       if (!mounted) return;
-      final n = p.getStringList('names');
+      final nn = p.getStringList('names');
       setState(() {
         players = p.getInt('players') ?? players;
         start = widget.startPts ?? p.getInt('start') ?? start;
@@ -656,9 +772,9 @@ class _SetupState extends State<SetupPage> {
         for (var i = 0; i < 4; i++) {
           songs[i] = Song.from(p.getString('song$i'));
         }
-        if (n != null) {
-          for (var i = 0; i < n.length && i < 4; i++) {
-            ctr[i].text = n[i];
+        if (nn != null) {
+          for (var i = 0; i < nn.length && i < 4; i++) {
+            ctr[i].text = nn[i];
           }
         }
       });
@@ -680,85 +796,82 @@ class _SetupState extends State<SetupPage> {
     }
   }
 
+  void _startGame(BuildContext c) {
+    _saveSetup();
+    final names = <String>[];
+    for (var i = 0; i < n; i++) {
+      final t = ctr[i].text.trim();
+      names.add(t.isEmpty ? 'Spieler ${i + 1}' : t);
+    }
+    final g = Game(names, wm ? 501 : start, wm ? true : dbl, wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first);
+    final songList = wm ? songs.sublist(0, 2) : const <Song?>[];
+    Navigator.push(c, MaterialPageRoute(builder: (_) => GamePage(g, songs: songList)));
+  }
+
   @override
-  Widget build(BuildContext c) => ValueListenableBuilder<bool>(
+  Widget build(BuildContext c) {
+    return ValueListenableBuilder<bool>(
       valueListenable: darkMode,
-      builder: (c, _, __) => Scaffold(
-        appBar: AppBar(title: Text(wm ? 'WM-MODUS' : 'NEUES SPIEL')),
-        body: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(children: [
-            Expanded(
+      builder: (c, _, __) {
+        return Scaffold(
+          appBar: AppBar(title: Text(wm ? 'WM-MODUS' : 'NEUES SPIEL')),
+          body: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(children: [
+              Expanded(
                 child: ListView(children: [
-              if (!wm)
-                _sec(
-                    'SPIELER',
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (!wm)
+                    _sec('SPIELER', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       SegmentedButton<int>(
-                          segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
-                          selected: {players},
-                          onSelectionChanged: (s) => setState(() => players = s.first)),
+                        segments: [for (var i = 1; i <= 4; i++) ButtonSegment(value: i, label: Text('$i'))],
+                        selected: {players},
+                        onSelectionChanged: (s) => setState(() => players = s.first),
+                      ),
                       const SizedBox(height: 12),
                       _names(),
                     ]))
-              else
-                _sec('SPIELER', _names()),
-              if (!wm)
-                _sec(
-                    'SPIEL $start',
-                    Column(children: [
+                  else
+                    _sec('SPIELER', _names()),
+                  if (!wm)
+                    _sec('SPIEL $start', Column(children: [
                       SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Double-Out'),
-                          value: dbl,
-                          onChanged: (v) => setState(() => dbl = v)),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Double-Out'),
+                        value: dbl,
+                        onChanged: (v) => setState(() => dbl = v),
+                      ),
                     ]))
-              else ...[
-                _sec(
-                    'FORMAT',
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  else ...[
+                    _sec('FORMAT', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Wrap(spacing: 8, children: [
                         for (var i = 0; i < _rounds.length; i++)
-                          ChoiceChip(label: Text(_rounds[i]), selected: round == i, onSelected: (_) => setState(() => round = i))
+                          ChoiceChip(label: Text(_rounds[i]), selected: round == i, onSelected: (_) => setState(() => round = i)),
                       ]),
                       const SizedBox(height: 10),
-                      Text(
-                          'First to ${_setsTo[round]} Sätze · Satz = first to 3 Legs · 501 · Double-Out\nAnwurf wechselt je Leg und Satz.\nEntscheidungssatz: 2 Legs Vorsprung.',
-                          style: TextStyle(fontSize: 11, color: kDim)),
+                      Text('First to ${_setsTo[round]} Sätze · Satz = first to 3 Legs · 501 · Double-Out\nAnwurf wechselt je Leg und Satz.\nEntscheidungssatz: 2 Legs Vorsprung.', style: TextStyle(fontSize: 11, color: kDim)),
                     ])),
-                _sec(
-                    'BULL-UP: WER WIRFT ZUERST?',
-                    Wrap(spacing: 8, children: [
+                    _sec('BULL-UP: WER WIRFT ZUERST?', Wrap(spacing: 8, children: [
                       for (var i = 0; i < 2; i++)
                         ChoiceChip(
-                            label: Text(ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()),
-                            selected: first == i,
-                            onSelected: (_) => setState(() => first = i))
+                          label: Text(ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()),
+                          selected: first == i,
+                          onSelected: (_) => setState(() => first = i),
+                        ),
                     ])),
-              ],
-            ])),
-            FilledButton(
-                onPressed: () {
-                  _saveSetup();
-                  Navigator.push(
-                    c,
-                    MaterialPageRoute(
-                        builder: (_) => GamePage(Game([
-                              for (var i = 0; i < n; i++)
-                                ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()
-                            ], wm ? 501 : start, wm ? true : dbl,
-                            wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first), songs: wm ? songs.sublist(0, 2) : const <Song?>[])));
-                },
-                child: const Text('Spiel starten')),
-          ]),
-        ),
-      ));
+                  ],
+                ]),
+              ),
+              FilledButton(onPressed: () => _startGame(c), child: const Text('Spiel starten')),
+            ]),
+          ),
+        );
+      },
+    );
+  }
 }
 
 List<Offset> calib = [];
-final boardPts = [
-  for (final a in [9, 99, 189, 279]) Offset(sin(a * pi / 180), -cos(a * pi / 180))
-];
+final boardPts = [for (final a in [9, 99, 189, 279]) Offset(sin(a * pi / 180), -cos(a * pi / 180))];
 const calibNames = ['20|1 (oben)', '6|10 (rechts)', '3|19 (unten)', '11|14 (links)'];
 
 List<double> homography(List<Offset> s, List<Offset> d) {
@@ -768,19 +881,19 @@ List<double> homography(List<Offset> s, List<Offset> d) {
     m[2 * i] = [x, y, 1, 0, 0, 0, -u * x, -u * y, u];
     m[2 * i + 1] = [0, 0, 0, x, y, 1, -v * x, -v * y, v];
   }
-  for (var c = 0; c < 8; c++) {
-    var p = c;
-    for (var r = c + 1; r < 8; r++) {
-      if (m[r][c].abs() > m[p][c].abs()) p = r;
+  for (var cc = 0; cc < 8; cc++) {
+    var p = cc;
+    for (var r = cc + 1; r < 8; r++) {
+      if (m[r][cc].abs() > m[p][cc].abs()) p = r;
     }
-    final t = m[c];
-    m[c] = m[p];
+    final t = m[cc];
+    m[cc] = m[p];
     m[p] = t;
     for (var r = 0; r < 8; r++) {
-      if (r == c) continue;
-      final f = m[r][c] / m[c][c];
-      for (var k = c; k < 9; k++) {
-        m[r][k] -= f * m[c][k];
+      if (r == cc) continue;
+      final f = m[r][cc] / m[cc][cc];
+      for (var k = cc; k < 9; k++) {
+        m[r][k] -= f * m[cc][k];
       }
     }
   }
@@ -793,7 +906,10 @@ Offset apply(List<double> h, double x, double y) {
 }
 
 class Gray {
-  final int w, h, ow, oh;
+  final int w;
+  final int h;
+  final int ow;
+  final int oh;
   final Uint8List d;
   Gray(this.w, this.h, this.ow, this.oh, this.d);
 }
@@ -894,7 +1010,6 @@ List<Offset> refineCalib(Gray g, List<Offset> start) {
     }
     return sum;
   }
-
   var best = List<Offset>.of(start);
   var bs = score(best);
   final s0 = bs;
@@ -923,7 +1038,8 @@ List<Offset> refineCalib(Gray g, List<Offset> start) {
 
 class Det {
   final Dart dart;
-  final Offset tip, board;
+  final Offset tip;
+  final Offset board;
   final int area;
   final List<Offset> blob;
   Det(this.dart, this.tip, this.board, this.area, this.blob);
@@ -989,11 +1105,11 @@ Det? detect(img.Image a, img.Image b) {
     final q = [s];
     label[s] = id;
     while (q.isNotEmpty) {
-      final c = q.removeLast();
-      n += cnt[c];
+      final cc = q.removeLast();
+      n += cnt[cc];
       for (var dy = -1; dy <= 1; dy++) {
         for (var dx = -1; dx <= 1; dx++) {
-          final nx = c % gw + dx, ny = c ~/ gw + dy;
+          final nx = cc % gw + dx, ny = cc ~/ gw + dy;
           if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
           final ni = ny * gw + nx;
           if (cnt[ni] > 0 && label[ni] == 0) {
@@ -1050,8 +1166,7 @@ Det? detect(img.Image a, img.Image b) {
   final end = len < 12 ? pts : (nLo < nHi ? pts.take(k) : pts.skip(pts.length - k)).toList();
   final tip = end.reduce((p, q) => p + q) / end.length.toDouble();
   final bp = apply(hm, tip.dx, tip.dy);
-  return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length,
-      [for (var i = 0; i < pts.length; i += max(1, pts.length ~/ 300)) pts[i]]);
+  return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length, [for (var i = 0; i < pts.length; i += max(1, pts.length ~/ 300)) pts[i]]);
 }
 
 class GamePage extends StatefulWidget {
@@ -1066,7 +1181,9 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   Game get g => widget.g;
   CameraController? ctrl;
   img.Image? base;
-  bool armed = false, auto = true, busy = false;
+  bool armed = false;
+  bool auto = true;
+  bool busy = false;
   Det? pending;
   Offset? tip;
   String? camErr;
@@ -1079,7 +1196,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   bool locked = false;
   img.Image? prev;
   bool manual = true;
-  int mult = 1;
   final pc = PageController(initialPage: 0);
   int? drag;
   int seen = 0;
@@ -1088,18 +1204,12 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   bool calDirty = true;
   String info = '';
   Timer? timer;
-
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat(reverse: true);
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
 
   @override
   void initState() {
     super.initState();
-    info = calib.length < 4
-        ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
-        : '${g.names[g.cur]} antippen, um zu starten';
+    info = calib.length < 4 ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an' : '${g.names[g.cur]} antippen, um zu starten';
     g.hold = false;
     walkLoading = g.wm && soundOn.value && widget.songs.any((s) => s != null);
     if (walkLoading) _prepareWalkIns();
@@ -1159,9 +1269,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       final t = '$e';
       camStarting = false;
       if (!mounted) return;
-      setState(() => camErr = t.toLowerCase().contains('permission') || t.contains('Access')
-          ? 'Kamera-Berechtigung fehlt.\nAndroid-Einstellungen → Apps → StanDart → Berechtigungen → Kamera erlauben.\n\n$t'
-          : 'Kamera konnte nicht starten:\n$t');
+      setState(() => camErr = t.toLowerCase().contains('permission') || t.contains('Access') ? 'Kamera-Berechtigung fehlt.' : 'Kamera konnte nicht starten:\n$t');
     }
   }
 
@@ -1176,7 +1284,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
 
   Future<img.Image?> _shot() async {
     final f = await ctrl!.takePicture();
-    var im = img.decodeImage(await f.readAsBytes());
+    final im = img.decodeImage(await f.readAsBytes());
     if (im == null) return null;
     return img.copyResize(img.bakeOrientation(im), width: 960);
   }
@@ -1190,7 +1298,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       } else if (g.held) {
         armed = false;
         base = null;
-        info = 'Zug beendet. Darts antippen = ändern. Darts ziehen, dann ${g.names[(g.cur + 1) % g.names.length]} antippen.';
+        info = 'Zug beendet. Darts antippen = ändern.';
       } else if (g.darts.isEmpty) {
         armed = false;
         base = null;
@@ -1227,7 +1335,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
           final r = refineCalib(cur, calib);
           if (!identical(r, calib)) {
             calib = r;
-            note = ' (Scheibe fein justiert)';
+            note = ' (justiert)';
             saveCalib();
           }
         }
@@ -1239,9 +1347,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         if (sh != null) {
           calib = [for (final p in refCalib!) p + Offset(sh.dx / cur.ow, sh.dy / cur.oh)];
           if (autoFit.value) calib = refineCalib(cur, calib);
-          note = ' (Scheibe nachgeführt: ${sh.dx.toInt()}/${sh.dy.toInt()} px)';
-        } else {
-          note = ' (Ausrichtung unsicher – ggf. neu kalibrieren)';
+          note = ' (nachgeführt)';
         }
       }
       pending = null;
@@ -1274,12 +1380,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       if (d == null) {
         pending = null;
         seen = 0;
-        if (diagOn.value && mounted) {
-          setState(() {
-            info = 'Kein Dart: $diagWhy';
-            blob = [];
-          });
-        }
       } else {
         seen++;
         if (mounted) {
@@ -1310,9 +1410,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     setState(() {
       calDirty = true;
       calib.add(Offset(p.dx / s.width, p.dy / s.height));
-      info = calib.length < 4
-          ? 'Weiter: ${calibNames[calib.length]}'
-          : 'Kalibriert (Punkte lassen sich verschieben). ${g.names[g.cur]} antippen.';
+      info = calib.length < 4 ? 'Weiter: ${calibNames[calib.length]}' : 'Kalibriert. ${g.names[g.cur]} antippen.';
       if (calib.length == 4) saveCalib();
     });
   }
@@ -1336,146 +1434,161 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     setState(() {
       calDirty = true;
       final o = calib[i];
-      calib[i] = Offset((o.dx + delta.dx * 0.5 / s.width).clamp(0.0, 1.0).toDouble(),
-          (o.dy + delta.dy * 0.5 / s.height).clamp(0.0, 1.0).toDouble());
+      calib[i] = Offset((o.dx + delta.dx * 0.5 / s.width).clamp(0.0, 1.0).toDouble(), (o.dy + delta.dy * 0.5 / s.height).clamp(0.0, 1.0).toDouble());
     });
   }
 
-  Widget _keys(void Function(Dart) onPick, void Function(VoidCallback) refresh, String lastLabel, VoidCallback onLast) {
-    Widget big(String t, VoidCallback f) => Expanded(
+  Widget _keys(void Function(Dart) onPick, String lastLabel, VoidCallback onLast) {
+    Widget big(String t, VoidCallback f) {
+      return Expanded(
         child: Padding(
-            padding: const EdgeInsets.all(3),
-            child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: f,
-                child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                        color: kInk.withValues(alpha: .07),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: kLine, width: 1.5)),
-                    child: FittedBox(child: Text(t, style: TextStyle(fontSize: 18, color: kInk)))))));
-    Widget cell(int n) => Expanded(
-        child: Padding(
-            padding: const EdgeInsets.all(3),
+          padding: const EdgeInsets.all(3),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: f,
             child: Container(
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                    color: kInk.withValues(alpha: .07),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: kLine, width: 1.5)),
-                child: Column(children: [
-                  Expanded(
-                      flex: 3,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: kInk.withValues(alpha: .07), borderRadius: BorderRadius.circular(14), border: Border.all(color: kLine, width: 1.5)),
+              child: FittedBox(child: Text(t, style: TextStyle(fontSize: 18, color: kInk))),
+            ),
+          ),
+        ),
+      );
+    }
+    Widget cell(int n) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(color: kInk.withValues(alpha: .07), borderRadius: BorderRadius.circular(14), border: Border.all(color: kLine, width: 1.5)),
+            child: Column(children: [
+              Expanded(
+                flex: 3,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onPick(Dart(n, 1)),
+                  child: Center(child: FittedBox(child: Text('$n', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: kInk)))),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Row(children: [
+                  for (final m in [2, 3])
+                    Expanded(
                       child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => onPick(Dart(n, 1)),
-                          child: Center(
-                              child: FittedBox(
-                                  child: Text('$n',
-                                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: kInk)))))),
-                  Expanded(
-                      flex: 2,
-                      child: Row(children: [
-                        for (final m in [2, 3])
-                          Expanded(
-                              child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => onPick(Dart(n, m)),
-                                  child: Container(
-                                      alignment: Alignment.center,
-                                      color: (m == 2 ? kViolet : teamColors[2]).withValues(alpha: .28),
-                                      child: Text(m == 2 ? 'D' : 'T',
-                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kInk))))),
-                      ])),
-                ]))));
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onPick(Dart(n, m)),
+                        child: Container(
+                          alignment: Alignment.center,
+                          color: (m == 2 ? kViolet : teamColors[2]).withValues(alpha: .28),
+                          child: Text(m == 2 ? 'D' : 'T', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kInk)),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
     return LayoutBuilder(builder: (_, k) {
       final cols = k.maxWidth > k.maxHeight ? 10 : 5;
       final rows = 20 ~/ cols;
       return Padding(
-          padding: const EdgeInsets.all(6),
-          child: Column(children: [
+        padding: const EdgeInsets.all(6),
+        child: Column(children: [
+          Expanded(
+            flex: 2,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              big('OUT', () => onPick(const Dart(0, 1))),
+              big('S-BULL', () => onPick(const Dart(25, 1))),
+              big('D-BULL', () => onPick(const Dart(25, 2))),
+              big(lastLabel, onLast),
+            ]),
+          ),
+          for (var r = 0; r < rows; r++)
             Expanded(
-                flex: 2,
-                child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  big('OUT', () => onPick(const Dart(0, 1))),
-                  big('S-BULL', () => onPick(const Dart(25, 1))),
-                  big('D-BULL', () => onPick(const Dart(25, 2))),
-                  big(lastLabel, onLast),
-                ])),
-            for (var r = 0; r < rows; r++)
-              Expanded(
-                  flex: 4,
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    for (var c = 0; c < cols; c++) cell(r * cols + c + 1)
-                  ])),
-          ]));
+              flex: 4,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (var cc = 0; cc < cols; cc++) cell(r * cols + cc + 1)]),
+            ),
+        ]),
+      );
     });
   }
 
-  void _edit(int k) => showModalBottomSheet(
+  void _edit(int k) {
+    showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (c) => StatefulBuilder(
-          builder: (c, set) => SizedBox(
-              height: min(430.0, MediaQuery.of(c).size.height * .9),
-              child: Column(children: [
-                Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Text('DART ${k + 1} ÄNDERN (jetzt ${g.darts[k].label})', style: TextStyle(color: kViolet))),
-                Expanded(
-                    child: _keys((d) {
-                  Navigator.pop(c);
-                  mult = 1;
-                  setState(() => g.replace(k, d));
-                }, set, '✕', () => Navigator.pop(c))),
-              ]))));
+        builder: (c, set) => SizedBox(
+          height: min(430.0, MediaQuery.of(c).size.height * .9),
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.all(10), child: Text('DART ${k + 1} ÄNDERN (jetzt ${g.darts[k].label})', style: TextStyle(color: kViolet))),
+            Expanded(
+              child: _keys((d) {
+                Navigator.pop(c);
+                setState(() => g.replace(k, d));
+              }, '✕', () => Navigator.pop(c)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 
-  void _tips() => showDialog(
+  void _tips() {
+    showDialog(
       context: context,
       builder: (c) => AlertDialog(
-              title: const Text('TIPPS FÜR DIE KAMERA'),
-              content: const SingleChildScrollView(
-                  child: Text('• Winkel: etwa 20–35° seitlich zur Scheibe, auf Höhe der Scheibenmitte. So sieht man die Darts von der Seite statt von hinten oder von vorn.\n'
-                      '• Handy fest aufstellen und nicht berühren. Das Board muss an der Wand fest sein, ein Wackeln beim Treffer stört die Erkennung am meisten.\n'
-                      '• Gleichmäßig von vorn beleuchten, kein Gegenlicht, keine Schatten vom Werfer.\n'
-                      '• Alle vier Kalibrierpunkte genau auf den Außenrand des Doppelrings setzen. Sie lassen sich ziehen.\n'
-                      '• Nach dem Wurf Hand und Dart kurz ruhig lassen, bis der Dart erkannt ist.\n'
-                      '• Zugende: Darts prüfen (antippen = ändern), Darts ziehen, dann den nächsten Spieler antippen.')),
-              actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))]));
+        title: const Text('TIPPS FÜR DIE KAMERA'),
+        content: const SingleChildScrollView(
+          child: Text('• Winkel: etwa 20–35° seitlich.\n• Handy fest aufstellen.\n• Gleichmäßig beleuchten.\n• Kalibrierpunkte genau auf den Außenrand des Doppelrings.\n• Nach dem Wurf kurz ruhig halten.'),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
+      ),
+    );
+  }
 
-  Widget _pill2(String t, int n, Color col) => Container(
+  Widget _pill2(String t, int n, Color col) {
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: col.withValues(alpha: .6))),
-      child: Text('$t $n', style: TextStyle(fontSize: 10, color: kInk, fontWeight: FontWeight.bold)));
+      child: Text('$t $n', style: TextStyle(fontSize: 10, color: kInk, fontWeight: FontWeight.bold)),
+    );
+  }
 
-  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit) => Row(children: [
-        Expanded(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}${g.wm ? '  S${g.sets[i]} L${g.legs[i]}' : ''}',
-              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, letterSpacing: 1, color: col)),
+  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit) {
+    return Row(children: [
+      Expanded(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}${g.wm ? '  S${g.sets[i]} L${g.legs[i]}' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, letterSpacing: 1, color: col)),
           Expanded(child: FittedBox(child: DotNum('${g.scores[i]}', kInk))),
           Text('Ø ${g.avg(i)}', style: TextStyle(fontSize: 10, color: kDim)),
-        ])),
-        const SizedBox(width: 6),
-        SizedBox(
-            width: 52,
-            child: Column(children: [
-              for (var k = 0; k < 3; k++)
-                Expanded(
-                    child: GestureDetector(
-                        onTap: canEdit && k < ds.length ? () => _edit(k) : null,
-                        child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
-                            child: k < ds.length
-                                ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 11, color: kInk)))
-                                : null)))
-            ])),
-      ]);
+        ]),
+      ),
+      const SizedBox(width: 6),
+      SizedBox(
+        width: 52,
+        child: Column(children: [
+          for (var k = 0; k < 3; k++)
+            Expanded(
+              child: GestureDetector(
+                onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 2),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                  child: k < ds.length ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 11, color: kInk))) : null,
+                ),
+              ),
+            ),
+        ]),
+      ),
+    ]);
+  }
 
   Widget _card(int i, {bool compact = false}) {
     final col = teamColors[i % teamColors.length];
@@ -1485,83 +1598,84 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     final canEdit = cur && g.held && !manual;
     final pulseActive = cur && g.winner == null && g.legWinner == null;
 
-    final Widget content = compact ? _compact(i, col, cur, ds, canEdit) : Column(children: [
-      Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
-          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
-      if (g.wm)
-        Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              _pill2('SÄTZE', g.sets[i], col),
-              const SizedBox(width: 6),
-              _pill2('LEGS', g.legs[i], col),
-            ])),
-      const SizedBox(height: 4),
-      FittedBox(child: DotNum('${g.scores[i]}', kInk)),
-      Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}',
-          style: TextStyle(fontSize: 11, color: kDim)),
-      const SizedBox(height: 8),
-      Row(children: [
-        for (var k = 0; k < 3; k++)
-          Expanded(
-              child: GestureDetector(
-                  onTap: canEdit && k < ds.length ? () => _edit(k) : null,
-                  child: Container(
+    final Widget content = compact
+        ? _compact(i, col, cur, ds, canEdit)
+        : Column(children: [
+            Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
+            if (g.wm)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  _pill2('SÄTZE', g.sets[i], col),
+                  const SizedBox(width: 6),
+                  _pill2('LEGS', g.legs[i], col),
+                ]),
+              ),
+            const SizedBox(height: 4),
+            FittedBox(child: DotNum('${g.scores[i]}', kInk)),
+            Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}', style: TextStyle(fontSize: 11, color: kDim)),
+            const SizedBox(height: 8),
+            Row(children: [
+              for (var k = 0; k < 3; k++)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                    child: Container(
                       height: 26,
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
-                      child: k < ds.length
-                          ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk)))
-                          : null))),
-      ]),
-    ]);
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                      child: k < ds.length ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk))) : null,
+                    ),
+                  ),
+                ),
+            ]),
+          ]);
 
     return Expanded(
-        child: GestureDetector(
-            onTap: () {
-              if (manual || g.winner != null) return;
-              if (g.held) {
-                if (i == nextI) {
-                  setState(g.confirmTurn);
-                  _arm();
-                }
-              } else if (cur) {
-                _arm();
-              }
-            },
-            child: AnimatedBuilder(
-              animation: _pulse,
-              builder: (_, child) {
-                final pv = pulseActive ? (0.35 + 0.65 * _pulse.value) : 1.0;
-                return Container(
-                    margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
-                    padding: EdgeInsets.all(compact ? 6 : 10),
-                    decoration: BoxDecoration(
-                        color: kCard,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: cur
-                                ? col.withValues(alpha: pv)
-                                : (g.held && i == nextI ? col : kLine),
-                            width: cur ? 2 : 1.5),
-                        boxShadow: cur
-                            ? [BoxShadow(color: col.withValues(alpha: 0.45 * pv), offset: const Offset(4, 4))]
-                            : null),
-                    child: child);
-              },
-              child: content,
-            )));
+      child: GestureDetector(
+        onTap: () {
+          if (manual || g.winner != null) return;
+          if (g.held) {
+            if (i == nextI) {
+              setState(g.confirmTurn);
+              _arm();
+            }
+          } else if (cur) {
+            _arm();
+          }
+        },
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (_, child) {
+            final pv = pulseActive ? (0.35 + 0.65 * _pulse.value) : 1.0;
+            return Container(
+              margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
+              padding: EdgeInsets.all(compact ? 6 : 10),
+              decoration: BoxDecoration(
+                color: kCard,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: cur ? col.withValues(alpha: pv) : (g.held && i == nextI ? col : kLine), width: cur ? 2 : 1.5),
+                boxShadow: cur ? [BoxShadow(color: col.withValues(alpha: 0.45 * pv), offset: const Offset(4, 4))] : null,
+              ),
+              child: child,
+            );
+          },
+          child: content,
+        ),
+      ),
+    );
   }
 
-  List<String> _lines() => [
-        for (var i = 0; i < g.names.length; i++)
-          '${g.names[i]}${g.wm ? '\nSÄTZE ${g.sets[i]} · LEGS ${g.legs[i]}' : ''}\nØ ${g.avg(i)} · ${g.thrown[i]} Darts'
-      ];
+  List<String> _lines() {
+    return [
+      for (var i = 0; i < g.names.length; i++)
+        '${g.names[i]}${g.wm ? '\nSÄTZE ${g.sets[i]} · LEGS ${g.legs[i]}' : ''}\nØ ${g.avg(i)} · ${g.thrown[i]} Darts',
+    ];
+  }
 
-  Widget _win(BuildContext c) => WinScreen(
+  Widget _win(BuildContext c) {
+    return WinScreen(
       g: g,
       title: 'GEWINNER',
       sound: true,
@@ -1570,178 +1684,195 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       nextLabel: 'REVANCHE',
       onUndo: () => setState(g.undo),
       onNext: () => Navigator.pushReplacement(
-          c,
-          MaterialPageRoute(
-              builder: (_) => GamePage(Game(g.names, g.start, g.dbl, wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak), songs: widget.songs))),
-      onMenu: () => Navigator.pop(c));
+        c,
+        MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl, wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak), songs: widget.songs)),
+      ),
+      onMenu: () => Navigator.pop(c),
+    );
+  }
 
-  Widget _legScreen(BuildContext c) => WinScreen(
+  Widget _legScreen(BuildContext c) {
+    return WinScreen(
       g: g,
       title: g.setWinner != null ? 'SATZ GEWONNEN' : 'LEG GEWONNEN',
       who: g.names[g.legWinner!],
-      lines: [
-        for (var i = 0; i < g.names.length; i++) '${g.names[i]}\nSÄTZE ${g.sets[i]} · LEGS ${g.legs[i]} · Ø ${g.avg(i)}'
-      ],
+      lines: [for (var i = 0; i < g.names.length; i++) '${g.names[i]}\nSÄTZE ${g.sets[i]} · LEGS ${g.legs[i]} · Ø ${g.avg(i)}'],
       nextLabel: 'NÄCHSTES LEG',
       onUndo: () => setState(g.undo),
       onNext: () => setState(() {
-            g.nextLeg();
-            armed = false;
-            base = null;
-            info = manual ? '' : '${g.names[g.cur]} antippen für Referenzbild';
-          }),
-      onMenu: () => Navigator.pop(c));
+        g.nextLeg();
+        armed = false;
+        base = null;
+        info = manual ? '' : '${g.names[g.cur]} antippen für Referenzbild';
+      }),
+      onMenu: () => Navigator.pop(c),
+    );
+  }
 
-  Widget _cameraPage(CameraController? cc) => Column(children: [
-        Padding(padding: const EdgeInsets.all(8), child: Text(info, textAlign: TextAlign.center)),
-        Expanded(
-            child: cc == null
-                ? Center(
-                    child: camErr == null
-                        ? const CircularProgressIndicator()
-                        : Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              Text(camErr!, textAlign: TextAlign.center, style: TextStyle(color: kDim, fontSize: 12)),
-                              const SizedBox(height: 12),
-                              OutlinedButton(
-                                  onPressed: () {
-                                    setState(() => camErr = null);
-                                    _initCam();
-                                  },
-                                  child: const Text('Erneut versuchen')),
-                            ])))
-                : LayoutBuilder(builder: (_, cons) {
-                    final size = cons.biggest;
-                    final isPortrait = size.height >= size.width;
-                    final camAspect = cc.value.aspectRatio;
-                    final previewAspect = isPortrait ? 1 / camAspect : camAspect;
-                    double w, h;
-                    if (size.width / previewAspect <= size.height) {
-                      w = size.width;
-                      h = w / previewAspect;
-                    } else {
-                      h = size.height;
-                      w = h * previewAspect;
-                    }
-                    return Center(
-                        child: SizedBox(
-                            width: w,
-                            height: h,
-                            child: LayoutBuilder(builder: (_, k) {
-                              final sz = Size(k.maxWidth, k.maxHeight);
-                              return Listener(
-                                  onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
-                                  onPointerMove: (e) => _panUpdate(e.delta, sz),
-                                  onPointerUp: (_) {
-                                    if (drag != null) saveCalib();
-                                    setState(() => drag = null);
-                                  },
-                                  onPointerCancel: (_) => setState(() => drag = null),
-                                  child: GestureDetector(
-                                      onTapUp: (t) => _calibTap(t.localPosition, sz),
-                                      child: Stack(fit: StackFit.expand, children: [
-                                        CameraPreview(cc),
-                                        CustomPaint(
-                                            painter: _Overlay(
-                                                List.of(calib),
-                                                tip,
-                                                diagOn.value ? blob : const [],
-                                                _pulse.value,
-                                                calib.length < 4)),
-                                      ])));
-                            })));
-                  })),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(children: [
-            Expanded(
-                child: OutlinedButton.icon(
-                    onPressed: () => setState(() {
-                          g.undo();
-                          armed = false;
-                          base = null;
-                          pending = null;
-                          prev = null;
-                          seen = 0;
-                          tip = null;
-                          blob = [];
-                          info = 'Undo – ${g.names[g.cur]} antippen für Referenzbild';
-                        }),
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Undo'))),
-            const SizedBox(width: 8),
-            Expanded(
-                child: OutlinedButton.icon(
-                    onPressed: () => setState(() {
-                          calib = [];
-                          saveCalib();
-                          calDirty = true;
-                          armed = false;
-                          info = 'Kalibrieren: ${calibNames[0]} antippen';
-                        }),
-                    icon: const Icon(Icons.crop_free),
-                    label: const Text('Kalib.'))),
-            IconButton(icon: const Icon(Icons.info_outline), onPressed: _tips),
-          ]),
-        ),
-      ]);
+  Widget _cameraPage(CameraController? cc) {
+    return Column(children: [
+      Padding(padding: const EdgeInsets.all(8), child: Text(info, textAlign: TextAlign.center)),
+      Expanded(
+        child: cc == null
+            ? Center(
+                child: camErr == null
+                    ? const CircularProgressIndicator()
+                    : Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(camErr!, textAlign: TextAlign.center, style: TextStyle(color: kDim, fontSize: 12)),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: () {
+                              setState(() => camErr = null);
+                              _initCam();
+                            },
+                            child: const Text('Erneut versuchen'),
+                          ),
+                        ]),
+                      ),
+              )
+            : LayoutBuilder(builder: (_, cons) {
+                final size = cons.biggest;
+                final isPortrait = size.height >= size.width;
+                final camAspect = cc.value.aspectRatio;
+                final previewAspect = isPortrait ? 1 / camAspect : camAspect;
+                double w, h;
+                if (size.width / previewAspect <= size.height) {
+                  w = size.width;
+                  h = w / previewAspect;
+                } else {
+                  h = size.height;
+                  w = h * previewAspect;
+                }
+                return Center(
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: LayoutBuilder(builder: (_, k) {
+                      final sz = Size(k.maxWidth, k.maxHeight);
+                      return Listener(
+                        onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
+                        onPointerMove: (e) => _panUpdate(e.delta, sz),
+                        onPointerUp: (_) {
+                          if (drag != null) saveCalib();
+                          setState(() => drag = null);
+                        },
+                        onPointerCancel: (_) => setState(() => drag = null),
+                        child: GestureDetector(
+                          onTapUp: (t) => _calibTap(t.localPosition, sz),
+                          child: Stack(fit: StackFit.expand, children: [
+                            CameraPreview(cc),
+                            CustomPaint(painter: _Overlay(List.of(calib), tip, diagOn.value ? blob : const [], _pulse.value, calib.length < 4)),
+                          ]),
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
+      ),
+      Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() {
+                g.undo();
+                armed = false;
+                base = null;
+                pending = null;
+                prev = null;
+                seen = 0;
+                tip = null;
+                blob = [];
+                info = 'Undo – ${g.names[g.cur]} antippen für Referenzbild';
+              }),
+              icon: const Icon(Icons.undo),
+              label: const Text('Undo'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() {
+                calib = [];
+                saveCalib();
+                calDirty = true;
+                armed = false;
+                info = 'Kalibrieren: ${calibNames[0]} antippen';
+              }),
+              icon: const Icon(Icons.crop_free),
+              label: const Text('Kalib.'),
+            ),
+          ),
+          IconButton(icon: const Icon(Icons.info_outline), onPressed: _tips),
+        ]),
+      ),
+    ]);
+  }
 
   @override
   Widget build(BuildContext c) {
     if (walkLoading) {
-      return Scaffold(
-          body: Center(child: Text('EINLAUF WIRD GELADEN …', style: TextStyle(color: kDim, letterSpacing: 2))));
+      return Scaffold(body: Center(child: Text('EINLAUF WIRD GELADEN …', style: TextStyle(color: kDim, letterSpacing: 2))));
     }
     if (walkIdx < walk.length) {
       final i = walk[walkIdx], sg = widget.songs[i]!;
       return WalkInScreen(
-          key: ValueKey(i),
-          name: g.names[i],
-          color: teamColors[i % teamColors.length],
-          title: sg.title,
-          artist: sg.artist,
-          url: walkUrls[i]!,
-          onDone: () => setState(() => walkIdx++));
+        key: ValueKey(i),
+        name: g.names[i],
+        color: teamColors[i % teamColors.length],
+        title: sg.title,
+        artist: sg.artist,
+        url: walkUrls[i]!,
+        onDone: () => setState(() => walkIdx++),
+      );
     }
     if (g.winner != null) return _win(c);
     if (g.legWinner != null) return _legScreen(c);
     final rem = g.scores[g.cur];
     final route = rem <= (g.dbl ? 170 : 180) ? checkout(rem, g.dbl, 3 - g.darts.length) : null;
+
     Widget pill(int i, String t) {
       final on = (manual ? 0 : 1) == i;
       return GestureDetector(
-          onTap: () => pc.animateToPage(i, duration: const Duration(milliseconds: 250), curve: Curves.easeOut),
-          child: Container(
-              margin: const EdgeInsets.all(4),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: on ? kAccent.withValues(alpha: .15) : null,
-                  border: Border.all(color: on ? kAccent : kLine)),
-              child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
+        onTap: () => pc.animateToPage(i, duration: const Duration(milliseconds: 250), curve: Curves.easeOut),
+        child: Container(
+          margin: const EdgeInsets.all(4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: on ? kAccent.withValues(alpha: .15) : null,
+            border: Border.all(color: on ? kAccent : kLine),
+          ),
+          child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2)),
+        ),
+      );
     }
 
     final infoBox = Column(mainAxisSize: MainAxisSize.min, children: [
       if (g.wm)
         Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-                'SATZ ${g.sets[0]}:${g.sets[1]}  ·  LEG ${g.legs[0]}:${g.legs[1]}   |   FIRST TO ${g.setsToWin}'
-                '${g.sets[0] == g.setsToWin - 1 && g.sets[1] == g.setsToWin - 1 ? '   |   ENTSCHEIDUNG' : ''}',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, letterSpacing: 2, color: kDim))),
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            'SATZ ${g.sets[0]}:${g.sets[1]}  ·  LEG ${g.legs[0]}:${g.legs[1]}   |   FIRST TO ${g.setsToWin}${g.sets[0] == g.setsToWin - 1 && g.sets[1] == g.setsToWin - 1 ? '   |   ENTSCHEIDUNG' : ''}',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, letterSpacing: 2, color: kDim),
+          ),
+        ),
       Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            if (g.msg != null)
-              const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
-            if (route != null) ...[
-              Text('CHECKOUT  ', style: TextStyle(color: kDim, letterSpacing: 2, fontSize: 11)),
-              Text(route.map((d) => d.label).join(' · '), style: TextStyle(color: kViolet, fontSize: 18)),
-            ],
-          ])),
+        padding: const EdgeInsets.only(top: 6),
+        child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          if (g.msg != null) const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
+          if (route != null) ...[
+            Text('CHECKOUT  ', style: TextStyle(color: kDim, letterSpacing: 2, fontSize: 11)),
+            Text(route.map((d) => d.label).join(' · '), style: TextStyle(color: kViolet, fontSize: 18)),
+          ],
+        ]),
+      ),
     ]);
+
     final pager = PageView(
       controller: pc,
       physics: drag != null ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
@@ -1753,57 +1884,59 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
           armed = false;
           base = null;
           pending = null;
-          info = calib.length < 4
-              ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
-              : '${g.names[g.cur]} antippen für Referenzbild';
+          info = calib.length < 4 ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an' : '${g.names[g.cur]} antippen für Referenzbild';
           if (ctrl == null) _initCam();
         }
       }),
       children: [
-        _keys((d) {
-          mult = 1;
-          _add(d);
-        }, setState, '↶', () => setState(g.undo)),
-        _cameraPage(ctrl)
+        _keys((d) => _add(d), '↶', () => setState(g.undo)),
+        _cameraPage(ctrl),
       ],
     );
+
     final size = MediaQuery.of(c).size;
     if (size.width > size.height) {
       return Scaffold(
-          body: SafeArea(
-              child: Row(children: [
-        SizedBox(
-            width: size.width * .38,
-            child: Column(children: [
-              Expanded(child: Column(children: [for (var i = 0; i < g.names.length; i++) _card(i, compact: true)])),
-              infoBox,
-            ])),
-        Expanded(
-            child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            pill(0, 'MANUELL'),
-            pill(1, 'KAMERA'),
-            if (!manual) ...[
-              const SizedBox(width: 8),
-              const Text('Auto'),
-              Switch(value: auto, onChanged: (v) => setState(() => auto = v))
-            ],
+        body: SafeArea(
+          child: Row(children: [
+            SizedBox(
+              width: size.width * .38,
+              child: Column(children: [
+                Expanded(child: Column(children: [for (var i = 0; i < g.names.length; i++) _card(i, compact: true)])),
+                infoBox,
+              ]),
+            ),
+            Expanded(
+              child: Column(children: [
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  pill(0, 'MANUELL'),
+                  pill(1, 'KAMERA'),
+                  if (!manual) ...[
+                    const SizedBox(width: 8),
+                    const Text('Auto'),
+                    Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
+                  ],
+                ]),
+                Expanded(child: pager),
+              ]),
+            ),
           ]),
-          Expanded(child: pager),
-        ])),
-      ])));
+        ),
+      );
     }
     return Scaffold(
-      appBar: AppBar(title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'), actions: [
-        if (!manual) const Text('Auto'),
-        if (!manual) Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
-      ]),
+      appBar: AppBar(
+        title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'),
+        actions: [
+          if (!manual) const Text('Auto'),
+          if (!manual) Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
+        ],
+      ),
       body: Column(children: [
         SizedBox(
-            height: g.wm ? 212 : 180,
-            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              for (var i = 0; i < g.names.length; i++) _card(i)
-            ])),
+          height: g.wm ? 212 : 180,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (var i = 0; i < g.names.length; i++) _card(i)]),
+        ),
         infoBox,
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
         Expanded(child: pager),
@@ -1817,10 +1950,9 @@ class _Dots extends CustomPainter {
   void paint(Canvas c, Size s) {
     final pts = <Offset>[
       for (var y = 10.0; y < s.height; y += 16)
-        for (var x = 10.0; x < s.width; x += 16) Offset(x, y)
+        for (var x = 10.0; x < s.width; x += 16) Offset(x, y),
     ];
-    c.drawPoints(PointMode.points, pts,
-        Paint()..color = kInk.withValues(alpha: .07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
+    c.drawPoints(PointMode.points, pts, Paint()..color = kInk.withValues(alpha: .07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
   }
 
   @override
@@ -1850,18 +1982,19 @@ const _glyph = {
 class DotNum extends StatelessWidget {
   final String text;
   final Color color;
-  final double u, reveal;
+  final double u;
+  final double reveal;
   final bool multi;
   const DotNum(this.text, this.color, {super.key, this.u = 8, this.reveal = 1, this.multi = false});
   @override
-  Widget build(BuildContext c) =>
-      CustomPaint(size: Size(text.length * 6 * u - u, 7 * u), painter: _DotNum(text, color, u, reveal, multi));
+  Widget build(BuildContext c) => CustomPaint(size: Size(text.length * 6 * u - u, 7 * u), painter: _DotNum(text, color, u, reveal, multi));
 }
 
 class _DotNum extends CustomPainter {
   final String text;
   final Color color;
-  final double u, reveal;
+  final double u;
+  final double reveal;
   final bool multi;
   _DotNum(this.text, this.color, this.u, this.reveal, this.multi);
   @override
@@ -1869,7 +2002,8 @@ class _DotNum extends CustomPainter {
     final lit = reveal * text.length * 6;
     for (var i = 0; i < text.length; i++) {
       final col = multi ? teamColors[i % teamColors.length] : color;
-      final on = Paint()..color = col, off = Paint()..color = col.withValues(alpha: .10);
+      final on = Paint()..color = col;
+      final off = Paint()..color = col.withValues(alpha: .10);
       final g = _glyph[text[i]] ?? _glyph['–']!;
       for (var y = 0; y < 7; y++) {
         for (var x = 0; x < 5; x++) {
@@ -1886,21 +2020,15 @@ class _DotNum extends CustomPainter {
 
 class WinScreen extends StatefulWidget {
   final Game g;
-  final String title, who, nextLabel;
+  final String title;
+  final String who;
+  final String nextLabel;
   final List<String> lines;
-  final VoidCallback onUndo, onNext, onMenu;
+  final VoidCallback onUndo;
+  final VoidCallback onNext;
+  final VoidCallback onMenu;
   final bool sound;
-  const WinScreen(
-      {super.key,
-      this.sound = false,
-      required this.g,
-      required this.title,
-      required this.who,
-      required this.lines,
-      required this.nextLabel,
-      required this.onUndo,
-      required this.onNext,
-      required this.onMenu});
+  const WinScreen({super.key, this.sound = false, required this.g, required this.title, required this.who, required this.lines, required this.nextLabel, required this.onUndo, required this.onNext, required this.onMenu});
   @override
   State<WinScreen> createState() => _WinState();
 }
@@ -1931,77 +2059,74 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext c) {
     final g = widget.g, col = teamColors[g.cur % teamColors.length];
-    Widget btn(String t, VoidCallback f) => Expanded(
+    Widget btn(String t, VoidCallback f) {
+      return Expanded(
         child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: FilledButton(
-                style: FilledButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                onPressed: f,
-                child: FittedBox(child: Text(t)))));
+          padding: const EdgeInsets.all(4),
+          child: FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+            onPressed: f,
+            child: FittedBox(child: Text(t)),
+          ),
+        ),
+      );
+    }
     return Scaffold(
-        backgroundColor: col,
-        body: Stack(children: [
-          Positioned.fill(
-              child: AnimatedBuilder(animation: ac, builder: (_, __) => CustomPaint(painter: _Confetti(ac.value)))),
-          SafeArea(
-              child: LayoutBuilder(
-                  builder: (_, k) => SingleChildScrollView(
-                      child: ConstrainedBox(
-                          constraints: BoxConstraints(minHeight: k.maxHeight),
-                          child: IntrinsicHeight(
-                              child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    const Spacer(),
-                    AnimatedBuilder(
+      backgroundColor: col,
+      body: Stack(children: [
+        Positioned.fill(child: AnimatedBuilder(animation: ac, builder: (_, __) => CustomPaint(painter: _Confetti(ac.value)))),
+        SafeArea(
+          child: LayoutBuilder(
+            builder: (_, k) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: k.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      const Spacer(),
+                      AnimatedBuilder(
                         animation: ac,
                         builder: (_, __) => Opacity(
-                            opacity: (ac.value * 10).floor() % 2 == 0 ? 1 : .3,
-                            child: Text('★ ${widget.title} ★',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.black, letterSpacing: 6, fontSize: 18)))),
-                    const SizedBox(height: 16),
-                    TweenAnimationBuilder<double>(
+                          opacity: (ac.value * 10).floor() % 2 == 0 ? 1 : .3,
+                          child: Text('★ ${widget.title} ★', textAlign: TextAlign.center, style: TextStyle(color: Colors.black, letterSpacing: 6, fontSize: 18)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TweenAnimationBuilder<double>(
                         tween: Tween(begin: 0, end: 1),
                         duration: const Duration(milliseconds: 1000),
                         curve: Curves.elasticOut,
                         builder: (_, v, child) => Transform.scale(scale: v, child: child),
                         child: FittedBox(
-                            child: Text(widget.who.toUpperCase(),
-                                style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 80,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
-                    const SizedBox(height: 28),
-                    for (final l in widget.lines)
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(l,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.4))),
-                    const Spacer(),
-                    Row(children: [btn('ZURÜCK', widget.onUndo), btn(widget.nextLabel, widget.onNext), btn('MENÜ', widget.onMenu)]),
-                  ]))))))),
-        ]));
+                          child: Text(widget.who.toUpperCase(), style: const TextStyle(color: Colors.black, fontSize: 80, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      for (final l in widget.lines)
+                        Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(l, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.4))),
+                      const Spacer(),
+                      Row(children: [btn('ZURÜCK', widget.onUndo), btn(widget.nextLabel, widget.onNext), btn('MENÜ', widget.onMenu)]),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 }
 
 class WalkInScreen extends StatefulWidget {
-  final String name, title, artist, url;
+  final String name;
+  final String title;
+  final String artist;
+  final String url;
   final Color color;
   final VoidCallback onDone;
-  const WalkInScreen(
-      {super.key,
-      required this.name,
-      required this.title,
-      required this.artist,
-      required this.url,
-      required this.color,
-      required this.onDone});
+  const WalkInScreen({super.key, required this.name, required this.title, required this.artist, required this.url, required this.color, required this.onDone});
   @override
   State<WalkInScreen> createState() => _WalkInState();
 }
@@ -2035,53 +2160,51 @@ class _WalkInState extends State<WalkInScreen> with SingleTickerProviderStateMix
   }
 
   @override
-  Widget build(BuildContext c) => Scaffold(
+  Widget build(BuildContext c) {
+    return Scaffold(
       backgroundColor: widget.color,
       body: SafeArea(
-          child: LayoutBuilder(
-              builder: (_, k) => SingleChildScrollView(
-                  child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: k.maxHeight),
-                      child: IntrinsicHeight(
-                          child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                                const Spacer(),
-                                const Text('★ EINLAUF ★',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.black54, letterSpacing: 6, fontSize: 16)),
-                                const SizedBox(height: 16),
-                                TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0, end: 1),
-                                    duration: const Duration(milliseconds: 1000),
-                                    curve: Curves.elasticOut,
-                                    builder: (_, v, child) => Transform.scale(scale: v, child: child),
-                                    child: FittedBox(
-                                        child: Text(widget.name.toUpperCase(),
-                                            style: const TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 80,
-                                                fontWeight: FontWeight.bold,
-                                                shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
-                                const SizedBox(height: 28),
-                                Text(widget.title,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                Text(widget.artist,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.black87, fontSize: 15)),
-                                const Spacer(),
-                                SizedBox(
-                                    height: 56,
-                                    child: AnimatedBuilder(
-                                        animation: ac, builder: (_, __) => CustomPaint(painter: _Eq(ac.value)))),
-                                const SizedBox(height: 16),
-                                FilledButton(
-                                    style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
-                                    onPressed: _finish,
-                                    child: const Text('ÜBERSPRINGEN')),
-                              ]))))))));
+        child: LayoutBuilder(
+          builder: (_, k) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: k.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Spacer(),
+                    const Text('★ EINLAUF ★', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, letterSpacing: 6, fontSize: 16)),
+                    const SizedBox(height: 16),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: 1),
+                      duration: const Duration(milliseconds: 1000),
+                      curve: Curves.elasticOut,
+                      builder: (_, v, child) => Transform.scale(scale: v, child: child),
+                      child: FittedBox(
+                        child: Text(widget.name.toUpperCase(), style: const TextStyle(color: Colors.black, fontSize: 80, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    Text(widget.title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(widget.artist, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black87, fontSize: 15)),
+                    const Spacer(),
+                    SizedBox(height: 56, child: AnimatedBuilder(animation: ac, builder: (_, __) => CustomPaint(painter: _Eq(ac.value)))),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                      onPressed: _finish,
+                      child: const Text('ÜBERSPRINGEN'),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Eq extends CustomPainter {
@@ -2134,8 +2257,10 @@ class _Logo extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final u = s.width;
-    final ink = fixed ? const Color(0xFFF4F2FA) : kInk, acc = fixed ? const Color(0xFF1AE5D0) : kAccent;
-    final vio = fixed ? const Color(0xFF9A6BFF) : kViolet, pk = fixed ? const Color(0xFFFF5FA2) : teamColors[2];
+    final ink = fixed ? const Color(0xFFF4F2FA) : kInk;
+    final acc = fixed ? const Color(0xFF1AE5D0) : kAccent;
+    final vio = fixed ? const Color(0xFF9A6BFF) : kViolet;
+    final pk = fixed ? const Color(0xFFFF5FA2) : teamColors[2];
     for (var pass = 0; pass < 2; pass++) {
       final off = pass == 0 ? u * .035 : 0.0;
       c.save();
@@ -2143,8 +2268,7 @@ class _Logo extends CustomPainter {
       c.rotate(-pi / 4);
       Paint p(Color col) => Paint()..color = pass == 0 ? ink.withValues(alpha: .3) : col;
       c.drawPath(Path()..moveTo(-.46 * u, 0)..lineTo(-.34 * u, -.03 * u)..lineTo(-.34 * u, .03 * u)..close(), p(ink));
-      c.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(acc));
+      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(acc));
       c.drawRect(Rect.fromLTRB(-.08 * u, -.018 * u, .14 * u, .018 * u), p(ink));
       c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, -.16 * u)..lineTo(.44 * u, -.16 * u)..lineTo(.34 * u, 0)..close(), p(vio));
       c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, .16 * u)..lineTo(.44 * u, .16 * u)..lineTo(.34 * u, 0)..close(), p(pk));
@@ -2204,34 +2328,29 @@ class _SplashState extends State<SplashPage> {
             duration: const Duration(milliseconds: 700),
             curve: Curves.easeOut,
             builder: (_, v, child) => Opacity(opacity: v, child: child),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LayoutBuilder(
-                  builder: (_, cons) {
-                    final shortest = MediaQuery.of(c).size.shortestSide;
-                    final size = (shortest * 0.42).clamp(90.0, 200.0);
-                    return LogoMark(size, fixed: true);
-                  },
-                ),
-                const SizedBox(height: 32),
-                const FittedBox(
-                  child: Text(
-                    'StanDart',
-                    style: TextStyle(
-                      fontSize: 56,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 3,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
-                        Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8)),
-                      ],
-                    ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              LayoutBuilder(builder: (_, cons) {
+                final shortest = MediaQuery.of(c).size.shortestSide;
+                final size = (shortest * 0.42).clamp(90.0, 200.0);
+                return LogoMark(size, fixed: true);
+              }),
+              const SizedBox(height: 32),
+              const FittedBox(
+                child: Text(
+                  'StanDart',
+                  style: TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 3,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
+                      Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8)),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ]),
           ),
         ),
       ),
@@ -2246,30 +2365,23 @@ class _Overlay extends CustomPainter {
   final double pulse;
   final bool pulseActive;
   _Overlay(this.pts, this.tip, this.blob, this.pulse, this.pulseActive);
+
   @override
   void paint(Canvas c, Size s) {
-    final thick = Paint()
-      ..color = kAccent
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    final thin = Paint()
-      ..color = kAccent.withValues(alpha: .7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
+    final thick = Paint()..color = kAccent..style = PaintingStyle.stroke..strokeWidth = 1.5;
+    final thin = Paint()..color = kAccent.withValues(alpha: .7)..style = PaintingStyle.stroke..strokeWidth = 0.8;
     Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
 
     final pulsePaint = Paint()
       ..color = kAccent.withValues(alpha: pulseActive ? 0.35 + 0.65 * pulse : 1.0)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
+
     for (var i = 0; i < pts.length; i++) {
       final isNext = pulseActive && i == pts.length - 1;
       c.drawCircle(sc(pts[i]), 7, isNext ? pulsePaint : thick);
       if (isNext) {
-        c.drawCircle(sc(pts[i]), 12 + 6 * pulse, Paint()
-          ..color = kAccent.withValues(alpha: 0.4 * (1 - pulse))
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2);
+        c.drawCircle(sc(pts[i]), 12 + 6 * pulse, Paint()..color = kAccent.withValues(alpha: 0.4 * (1 - pulse))..style = PaintingStyle.stroke..strokeWidth = 2);
       }
     }
 
@@ -2279,21 +2391,24 @@ class _Overlay extends CustomPainter {
         final t = deg * pi / 180;
         return sc(apply(hb, r * sin(t), -r * cos(t)));
       }
-
       for (final r in [1.0, 0.953, 0.629, 0.582, 0.094, 0.037]) {
         final path = Path();
         for (var i = 0; i <= 72; i++) {
           final q = at(r, i * 5.0);
-          i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+          if (i == 0) {
+            path.moveTo(q.dx, q.dy);
+          } else {
+            path.lineTo(q.dx, q.dy);
+          }
         }
         c.drawPath(path, r == 1.0 ? thick : thin);
       }
       for (var k = 0; k < 20; k++) {
         c.drawLine(at(0.094, 9.0 + 18 * k), at(1.0, 9.0 + 18 * k), thin);
         final tp = TextPainter(
-            text: TextSpan(text: '${order[k]}', style: const TextStyle(color: Colors.white70, fontSize: 10)),
-            textDirection: TextDirection.ltr)
-          ..layout();
+          text: TextSpan(text: '${order[k]}', style: const TextStyle(color: Colors.white70, fontSize: 10)),
+          textDirection: TextDirection.ltr,
+        )..layout();
         tp.paint(c, at(1.1, 18.0 * k) - Offset(tp.width / 2, tp.height / 2));
       }
     }
