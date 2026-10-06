@@ -2051,9 +2051,6 @@ class WalkInScreen extends StatefulWidget {
   State<WalkInScreen> createState() => _WalkInState();
 }
 
-class _WalkInState extends State<WalkInScreen> with SingleTickerProviderState
-// (Rest von _WalkInState – direkt an das abgeschnittene "with SingleTickerProvider" anschließen)
-
 class _WalkInState extends State<WalkInScreen> with SingleTickerProviderStateMixin {
   late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
   final AudioPlayer _ap = AudioPlayer();
