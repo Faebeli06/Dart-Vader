@@ -2052,3 +2052,300 @@ class WalkInScreen extends StatefulWidget {
 }
 
 class _WalkInState extends State<WalkInScreen> with SingleTickerProviderState
+// (Rest von _WalkInState – direkt an das abgeschnittene "with SingleTickerProvider" anschließen)
+
+class _WalkInState extends State<WalkInScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+  final AudioPlayer _ap = AudioPlayer();
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ap.onPlayerComplete.listen((_) => _finish());
+    _ap.play(UrlSource(widget.url)).catchError((_) {
+      _finish();
+    });
+  }
+
+  void _finish() {
+    if (_done || !mounted) return;
+    _done = true;
+    widget.onDone();
+  }
+
+  @override
+  void dispose() {
+    _ap.stop();
+    _ap.dispose();
+    ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+      backgroundColor: widget.color,
+      body: SafeArea(
+          child: LayoutBuilder(
+              builder: (_, k) => SingleChildScrollView(
+                  child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: k.maxHeight),
+                      child: IntrinsicHeight(
+                          child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                const Spacer(),
+                                const Text('★ EINLAUF ★',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.black54, letterSpacing: 6, fontSize: 16)),
+                                const SizedBox(height: 16),
+                                TweenAnimationBuilder<double>(
+                                    tween: Tween(begin: 0, end: 1),
+                                    duration: const Duration(milliseconds: 1000),
+                                    curve: Curves.elasticOut,
+                                    builder: (_, v, child) => Transform.scale(scale: v, child: child),
+                                    child: FittedBox(
+                                        child: Text(widget.name.toUpperCase(),
+                                            style: const TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 80,
+                                                fontWeight: FontWeight.bold,
+                                                shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
+                                const SizedBox(height: 28),
+                                Text(widget.title,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Text(widget.artist,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: Colors.black87, fontSize: 15)),
+                                const Spacer(),
+                                SizedBox(
+                                    height: 56,
+                                    child: AnimatedBuilder(
+                                        animation: ac, builder: (_, __) => CustomPaint(painter: _Eq(ac.value)))),
+                                const SizedBox(height: 16),
+                                FilledButton(
+                                    style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                                    onPressed: _finish,
+                                    child: const Text('ÜBERSPRINGEN')),
+                              ]))))))));
+}
+
+class _Eq extends CustomPainter {
+  final double t;
+  _Eq(this.t);
+  @override
+  void paint(Canvas c, Size s) {
+    const n = 18;
+    final bw = s.width / (n * 1.6);
+    for (var i = 0; i < n; i++) {
+      final h = s.height * (.2 + .8 * sin(t * 2 * pi * (1 + i % 3) + i * 0.9).abs());
+      c.drawRect(Rect.fromLTWH(i * bw * 1.6, s.height - h, bw, h), Paint()..color = Colors.black.withValues(alpha: .85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Eq o) => o.t != t;
+}
+
+class _Confetti extends CustomPainter {
+  final double t;
+  _Confetti(this.t);
+  @override
+  void paint(Canvas c, Size s) {
+    final cols = [Colors.white, Colors.black, kViolet, kAccent, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+    const n = 48;
+    for (var i = 0; i < n; i++) {
+      final x = (i * 0.618034 % 1) * s.width;
+      final y = ((t * (1 + i % 2) + i / n) % 1) * (s.height + 20) - 10;
+      final sz = 6.0 + (i % 3) * 4;
+      c.drawRect(Rect.fromLTWH(x, y, sz, sz), Paint()..color = cols[i % cols.length].withValues(alpha: .85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Confetti o) => o.t != t;
+}
+
+/// Logo: Punktmatrix-Scheibe in 90er-Farben mit hartem Schatten und Pfeil
+class LogoMark extends StatelessWidget {
+  final double size;
+  final bool fixed; // feste dunkle Palette (Startbildschirm)
+  const LogoMark(this.size, {super.key, this.fixed = false});
+  @override
+  Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _Logo(fixed));
+}
+
+class _Logo extends CustomPainter {
+  final bool fixed;
+  _Logo(this.fixed);
+  @override
+  void paint(Canvas c, Size s) {
+    final u = s.width;
+    final ink = fixed ? const Color(0xFFF4F2FA) : kInk, acc = fixed ? const Color(0xFF1AE5D0) : kAccent;
+    final vio = fixed ? const Color(0xFF9A6BFF) : kViolet, pk = fixed ? const Color(0xFFFF5FA2) : teamColors[2];
+    for (var pass = 0; pass < 2; pass++) {
+      final off = pass == 0 ? u * .035 : 0.0;
+      c.save();
+      c.translate(u / 2 + off, u / 2 + off);
+      c.rotate(-pi / 4);
+      Paint p(Color col) => Paint()..color = pass == 0 ? ink.withValues(alpha: .3) : col;
+      c.drawPath(Path()..moveTo(-.46 * u, 0)..lineTo(-.34 * u, -.03 * u)..lineTo(-.34 * u, .03 * u)..close(), p(ink));
+      c.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(acc));
+      c.drawRect(Rect.fromLTRB(-.08 * u, -.018 * u, .14 * u, .018 * u), p(ink));
+      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, -.16 * u)..lineTo(.44 * u, -.16 * u)..lineTo(.34 * u, 0)..close(), p(vio));
+      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, .16 * u)..lineTo(.44 * u, .16 * u)..lineTo(.34 * u, 0)..close(), p(pk));
+      c.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => true;
+}
+
+/// Kurzer Startbildschirm, Tippen überspringt. 10) Mindestens 4s sichtbar.
+class SplashPage extends StatefulWidget {
+  const SplashPage({super.key});
+  @override
+  State<SplashPage> createState() => _SplashState();
+}
+
+class _SplashState extends State<SplashPage> {
+  Timer? _timer;
+  bool gone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 10) Fester Timer statt AnimationController – zuverlässig 4 Sekunden
+    _timer = Timer(const Duration(seconds: 4), _go);
+  }
+
+  void _go() {
+    if (gone || !mounted) return;
+    gone = true;
+    Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+            pageBuilder: (_, __, ___) => const ModePage(),
+            transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
+            transitionDuration: const Duration(milliseconds: 350)));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _go,
+      child: Scaffold(
+          backgroundColor: const Color(0xFF09080F),
+          body: Center(
+              child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeOut,
+                  builder: (_, v, child) => Opacity(opacity: v, child: child),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    // 11) Logo hat eine Mindestgröße (geclampt auf 90..200) – wird nie zu klein
+                    LayoutBuilder(builder: (_, cons) {
+                      final shortest = MediaQuery.of(c).size.shortestSide;
+                      final size = (shortest * 0.42).clamp(90.0, 200.0);
+                      return LogoMark(size, fixed: true);
+                    }),
+                    const SizedBox(height: 32),
+                    ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 40),
+                        child: const FittedBox(
+                            child: Text('StanDart',
+                                style: TextStyle(
+                                    fontSize: 56,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 3,
+                                    color: Colors.white,
+                                    shadows: [
+                                      Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
+                                      Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8))
+                                    ])))),
+                  ]))))));
+}
+
+// ---------- Kamera-Overlay ----------
+class _Overlay extends CustomPainter {
+  final List<Offset> pts;
+  final Offset? tip;
+  final List<Offset> blob;
+  final double pulse;       // 1) Puls-Wert 0..1
+  final bool pulseActive;   // 1) nur wenn Kalibrierung noch läuft
+  _Overlay(this.pts, this.tip, this.blob, this.pulse, this.pulseActive);
+  @override
+  void paint(Canvas c, Size s) {
+    final thick = Paint()
+      ..color = kAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final thin = Paint()
+      ..color = kAccent.withValues(alpha: .7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
+
+    // 1) Pulsierender Kalibrier-Kreis: nur wenn noch nicht alle 4 Punkte gesetzt
+    final pulsePaint = Paint()
+      ..color = kAccent.withValues(alpha: pulseActive ? 0.35 + 0.65 * pulse : 1.0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    for (var i = 0; i < pts.length; i++) {
+      final isNext = pulseActive && i == pts.length - 1;
+      c.drawCircle(sc(pts[i]), 7, isNext ? pulsePaint : thick);
+      if (isNext) {
+        // zusätzlicher äußerer Puls-Ring
+        c.drawCircle(sc(pts[i]), 12 + 6 * pulse, Paint()
+          ..color = kAccent.withValues(alpha: 0.4 * (1 - pulse))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2);
+      }
+    }
+
+    if (pts.length == 4) {
+      final hb = homography(boardPts, pts); // Board -> Bild (normiert)
+      Offset at(double r, double deg) {
+        final t = deg * pi / 180;
+        return sc(apply(hb, r * sin(t), -r * cos(t)));
+      }
+
+      for (final r in [1.0, 0.953, 0.629, 0.582, 0.094, 0.037]) {
+        final path = Path();
+        for (var i = 0; i <= 72; i++) {
+          final q = at(r, i * 5.0);
+          i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+        }
+        c.drawPath(path, r == 1.0 ? thick : thin);
+      }
+      for (var k = 0; k < 20; k++) {
+        c.drawLine(at(0.094, 9.0 + 18 * k), at(1.0, 9.0 + 18 * k), thin);
+        final tp = TextPainter(
+            text: TextSpan(text: '${order[k]}', style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            textDirection: TextDirection.ltr)
+          ..layout();
+        tp.paint(c, at(1.1, 18.0 * k) - Offset(tp.width / 2, tp.height / 2));
+      }
+    }
+    final bp = Paint()..color = kViolet.withValues(alpha: .6);
+    for (final o in blob) {
+      c.drawCircle(sc(o), 1.6, bp);
+    }
+    if (tip != null) {
+      c.drawCircle(sc(tip!), 6, Paint()..color = kViolet);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => true;
+}
