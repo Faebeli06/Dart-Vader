@@ -11,7 +11,6 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Palette: Dunkel = 90s auf Nothing-Schwarz, Hell = Beige mit Rot/Blau/Orange/Gelb. Umschaltung per applyTheme().
 final darkMode = ValueNotifier<bool>(true), vibOn = ValueNotifier<bool>(true), soundOn = ValueNotifier<bool>(true);
 final diagOn = ValueNotifier<bool>(false), autoFit = ValueNotifier<bool>(true);
 String diagWhy = '';
@@ -22,15 +21,15 @@ List<Color> teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color
 
 void applyTheme(bool d) {
   if (d) {
-    kBg = Color(0xFF09080F); kCard = Color(0xFF14121C); kLine = Color(0xFF2B2838);
-    kInk = Color(0xFFF4F2FA); kDim = Color(0xFF9A97A8); kOnAccent = Colors.black;
-    kAccent = Color(0xFF1AE5D0); kViolet = Color(0xFF9A6BFF);
-    teamColors = [kAccent, kViolet, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+    kBg = const Color(0xFF09080F); kCard = const Color(0xFF14121C); kLine = const Color(0xFF2B2838);
+    kInk = const Color(0xFFF4F2FA); kDim = const Color(0xFF9A97A8); kOnAccent = Colors.black;
+    kAccent = const Color(0xFF1AE5D0); kViolet = const Color(0xFF9A6BFF);
+    teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
   } else {
-    kBg = Color(0xFFF1E7D3); kCard = Color(0xFFFBF5E6); kLine = Color(0xFFC9BB9C);
-    kInk = Color(0xFF1B1A22); kDim = Color(0xFF6B6558); kOnAccent = Colors.white;
-    kAccent = Color(0xFF2563EB); kViolet = Color(0xFFE63B2E);
-    teamColors = [kAccent, kViolet, Color(0xFFFF8A00), Color(0xFFE0A800)];
+    kBg = const Color(0xFFF1E7D3); kCard = const Color(0xFFFBF5E6); kLine = const Color(0xFFC9BB9C);
+    kInk = const Color(0xFF1B1A22); kDim = const Color(0xFF6B6558); kOnAccent = Colors.white;
+    kAccent = const Color(0xFF2563EB); kViolet = const Color(0xFFE63B2E);
+    teamColors = [kAccent, kViolet, const Color(0xFFFF8A00), const Color(0xFFE0A800)];
   }
 }
 
@@ -91,11 +90,10 @@ Future<void> main() async {
       }));
 }
 
-// ---------- Spiellogik ----------
 const order = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
 class Dart {
-  final int n, m; // n: 0=Fehl, 25=Bull; m: Multiplikator
+  final int n, m;
   const Dart(this.n, this.m);
   int get points => n * m;
   String get label => n == 0
@@ -105,7 +103,6 @@ class Dart {
           : '${m == 3 ? 'T' : m == 2 ? 'D' : ''}$n';
 }
 
-/// dx, dy: Abstand vom Mittelpunkt, normiert auf den Außenrand des Doppelrings.
 Dart fromBoard(double dx, double dy) {
   final r = sqrt(dx * dx + dy * dy);
   if (r > 1.0) return const Dart(0, 1);
@@ -127,10 +124,10 @@ class Game {
   int cur = 0, turnStart;
   List<Dart> darts = [];
   String? winner, msg;
-  bool hold = false, held = false; // hold: Zugende erst nach Bestätigung
-  final bool wm, tieBreak; // WM-Modus: Sätze (first to 3 Legs), Entscheidungssatz mit 2 Legs Vorsprung
+  bool hold = false, held = false;
+  final bool wm, tieBreak;
   final int setsToWin;
-  late List<int> legs, sets, done; // done: Punkte aus abgeschlossenen Legs (für den Match-Schnitt)
+  late List<int> legs, sets, done;
   int legStart = 0, setStart = 0;
   int? legWinner, setWinner;
   Game(this.names, this.start, this.dbl, {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0})
@@ -144,7 +141,6 @@ class Game {
     scores = List.filled(names.length, start);
     thrown = List.filled(names.length, 0);
     last = List.generate(names.length, (_) => <Dart>[]);
-    // F) turnStart sauber aus dem tatsächlichen Startwert des ersten Werfers setzen
     turnStart = scores[cur];
   }
   String avg(int i) => thrown[i] == 0 ? '–' : ((done[i] + start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
@@ -202,7 +198,6 @@ class Game {
     setWinner = null;
     final deciding = sets[0] == setsToWin - 1 && sets[1] == setsToWin - 1;
     final o = legs[1 - w];
-    // B) Entscheidungssatz: nur 2 Legs Vorsprung, kein festes Maximum
     final won = deciding && tieBreak ? (legs[w] >= 3 && legs[w] - o >= 2) : legs[w] >= 3;
     if (won) {
       sets[w]++;
@@ -211,7 +206,6 @@ class Game {
     }
   }
 
-  /// Nächstes Leg: Anwurf wechselt; nach einem Satz wechselt auch der Satz-Anwurf.
   void nextLeg() {
     if (legWinner == null || winner != null) return;
     if (setWinner != null) {
@@ -228,7 +222,6 @@ class Game {
     darts = [];
     msg = null;
     held = false;
-    // C) Historie nach abgeschlossenem Leg bereinigen, damit sie nicht endlos wächst
     hist.clear();
     cur = legStart;
     turnStart = start;
@@ -272,7 +265,6 @@ class Game {
     }
   }
 
-  /// Nimmt den letzten Dart zurück, auch über den Spielerwechsel hinweg.
   void undo() {
     if (hist.isEmpty) return;
     final h = hist.removeLast();
@@ -295,7 +287,6 @@ class Game {
   }
 }
 
-// ---------- Checkout-Vorschläge ----------
 final _all = <Dart>[
   for (var n = 20; n >= 1; n--) Dart(n, 3),
   for (var n = 20; n >= 1; n--) Dart(n, 2),
@@ -322,10 +313,8 @@ int _cost(List<Dart> r, bool dbl) {
   return c;
 }
 
-/// Kürzester Weg auf 0 mit höchstens [left] Darts (bei Double-Out: letzter Dart ein Double).
 List<Dart>? checkout(int rem, bool dbl, int left) {
   final key = '$rem$dbl$left';
-  // Build-Improvement 3: Cache begrenzen, damit er nicht endlos wächst
   if (!_memo.containsKey(key) && _memo.length > 500) _memo.clear();
   return _memo.putIfAbsent(key, () {
     for (var n = 1; n <= left; n++) {
@@ -366,7 +355,6 @@ void showSettings(BuildContext c) => showModalBottomSheet(
       builder: (c) => StatefulBuilder(
           builder: (c, set) => SafeArea(
                   child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                // 12) Label invertiert: zeigt an, was der aktuelle Zustand ist
                 SwitchListTile(
                     title: Text(darkMode.value ? 'Dunkles Design' : 'Helles Design'),
                     value: darkMode.value,
@@ -418,7 +406,6 @@ void showSettings(BuildContext c) => showModalBottomSheet(
                     }),
               ])))));
 
-// ---------- Einlaufsongs (Deezer, 30-s-Vorschau) ----------
 class Song {
   final int id;
   final String title, artist;
@@ -551,9 +538,7 @@ class _SongPickerState extends State<_SongPicker> {
                             c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'))),
                 ])),
               ]))));
-}
 
-// ---------- Modus-Auswahl (Startseite) ----------
 class ModePage extends StatelessWidget {
   const ModePage({super.key});
   Widget tile(BuildContext c, String big, String small, Color col, VoidCallback f) {
@@ -597,7 +582,6 @@ class ModePage extends StatelessWidget {
       });
 }
 
-// ---------- Setup ----------
 class SetupPage extends StatefulWidget {
   final int? startPts;
   final bool wm;
@@ -771,8 +755,6 @@ class _SetupState extends State<SetupPage> {
       ));
 }
 
-// ---------- Kalibrierung / Perspektive ----------
-/// Normierte Kalibrierpunkte (0..1) im Kamerabild: Außenrand Doppelring bei 20|1, 6|10, 3|19, 11|14
 List<Offset> calib = [];
 final boardPts = [
   for (final a in [9, 99, 189, 279]) Offset(sin(a * pi / 180), -cos(a * pi / 180))
@@ -811,12 +793,11 @@ Offset apply(List<double> h, double x, double y) {
 }
 
 class Gray {
-  final int w, h, ow, oh; // Größe + Originalgröße
+  final int w, h, ow, oh;
   final Uint8List d;
   Gray(this.w, this.h, this.ow, this.oh, this.d);
 }
 
-/// Kantenbild in halber Auflösung (unabhängig von der Helligkeit).
 Gray edges(img.Image im) {
   const f = 2;
   final w = im.width ~/ f, h = im.height ~/ f;
@@ -835,7 +816,6 @@ Gray edges(img.Image im) {
   return Gray(w, h, im.width, im.height, e);
 }
 
-/// Wie weit (Originalpixel) hat sich das Bild [cur] gegenüber [ref] verschoben? null = unsicher.
 Offset? align(Gray ref, Gray cur, List<Offset> pts) {
   var x0 = 1.0, y0 = 1.0, x1 = 0.0, y1 = 0.0;
   for (final p in pts) {
@@ -871,7 +851,6 @@ Offset? align(Gray ref, Gray cur, List<Offset> pts) {
   return Offset(bx * 2.0, by * 2.0);
 }
 
-/// Wackel-tolerant: kleinster Unterschied zu Pixeln im Umkreis von 2 px im Referenzbild.
 double _wob(Uint8List a, Uint8List b, int w, int h, int x, int y, double shift) {
   final i = (y * w + x) * 3;
   var best = 1e9;
@@ -889,7 +868,6 @@ double _wob(Uint8List a, Uint8List b, int w, int h, int x, int y, double shift) 
   return best;
 }
 
-/// Mittlere Helligkeitsänderung zwischen zwei Bildern (Bewegung im Bild?)
 double motion(img.Image a, img.Image b) {
   var s = 0.0, n = 0;
   for (var y = 0; y < a.height && y < b.height; y += 12) {
@@ -901,8 +879,6 @@ double motion(img.Image a, img.Image b) {
   return s / n;
 }
 
-/// Feinabgleich: die 4 Punkte werden in kleinen Schritten (max. 4 px) verschoben, bis die
-/// gezeichneten Ringe am besten auf starken Kanten liegen. Nur übernommen, wenn es klar besser wird.
 List<Offset> refineCalib(Gray g, List<Offset> start) {
   double score(List<Offset> p) {
     final hb = homography(boardPts, p);
@@ -953,8 +929,6 @@ class Det {
   Det(this.dart, this.tip, this.board, this.area, this.blob);
 }
 
-/// Neuer Dart = größter veränderter Bereich im Board. Die Spitze ist das schmale Ende
-/// (die Flights sind breit) und wird per Homographie auf die Scheibe abgebildet.
 Det? detect(img.Image a, img.Image b) {
   final w = min(a.width, b.width), h = min(a.height, b.height);
   final pix = [for (final o in calib) Offset(o.dx * w, o.dy * h)];
@@ -990,7 +964,7 @@ Det? detect(img.Image a, img.Image b) {
       sb += rb[i] + rb[i + 1] + rb[i + 2];
     }
   }
-  final shift = (sb - sa) / (bw * bh * 3); // globale Helligkeitsänderung ignorieren
+  final shift = (sb - sa) / (bw * bh * 3);
   const f = 3;
   final gw = (bw + f - 1) ~/ f, gh = (bh + f - 1) ~/ f;
   final cnt = List.filled(gw * gh, 0);
@@ -1080,10 +1054,9 @@ Det? detect(img.Image a, img.Image b) {
       [for (var i = 0; i < pts.length; i += max(1, pts.length ~/ 300)) pts[i]]);
 }
 
-// ---------- Spiel ----------
 class GamePage extends StatefulWidget {
   final Game g;
-  final List<Song?> songs; // Einlaufsongs (WM), je Spieler
+  final List<Song?> songs;
   const GamePage(this.g, {super.key, this.songs = const []});
   @override
   State<GamePage> createState() => _GameState();
@@ -1105,7 +1078,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   List<Offset> blob = [];
   bool locked = false;
   img.Image? prev;
-  bool manual = true; // Standard: Zahlenfeld, Kamera nur per Wischen
+  bool manual = true;
   int mult = 1;
   final pc = PageController(initialPage: 0);
   int? drag;
@@ -1116,7 +1089,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   String info = '';
   Timer? timer;
 
-  // 8) Puls für aktiven Spieler + Kalibrier-Kreise
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1400),
@@ -1128,13 +1100,12 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     info = calib.length < 4
         ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
         : '${g.names[g.cur]} antippen, um zu starten';
-    g.hold = false; // Manuell: Spielerwechsel automatisch
+    g.hold = false;
     walkLoading = g.wm && soundOn.value && widget.songs.any((s) => s != null);
     if (walkLoading) _prepareWalkIns();
     timer = Timer.periodic(const Duration(milliseconds: 900), (_) => _tick());
   }
 
-  /// Holt frische Vorschau-Links (Deezer-Links laufen ab) und startet danach die Einläufe.
   Future<void> _prepareWalkIns() async {
     final list = <int>[];
     for (var i = 0; i < widget.songs.length; i++) {
@@ -1239,7 +1210,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     busy = true;
     try {
       if (!locked) {
-        // Fokus/Belichtung nur einmal sperren, danach kein Warten mehr beim Zugwechsel
         try {
           await ctrl!.setExposureMode(ExposureMode.auto);
           await ctrl!.setFocusMode(FocusMode.auto);
@@ -1261,7 +1231,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
             saveCalib();
           }
         }
-        refG = cur; // Referenz für das automatische Nachführen
+        refG = cur;
         refCalib = List.of(calib);
         calDirty = false;
       } else {
@@ -1287,14 +1257,13 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     if (mounted) setState(() {});
   }
 
-  /// Auto-Erkennung: Position muss in zwei Aufnahmen hintereinander (fast) gleich sein.
   Future<void> _tick() async {
     if (manual || !auto || !armed || busy || ctrl == null || base == null || g.winner != null || g.legWinner != null) return;
     busy = true;
     try {
       final now = await _shot();
       if (now == null) return;
-      final moving = prev != null && motion(prev!, now) > 3; // Hand/Dart noch in Bewegung
+      final moving = prev != null && motion(prev!, now) > 3;
       prev = now;
       if (moving) {
         pending = null;
@@ -1361,7 +1330,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     drag = best;
   }
 
-  /// Feinjustierung: der Punkt bewegt sich nur halb so weit wie der Finger.
   void _panUpdate(Offset delta, Size s) {
     final i = drag;
     if (i == null) return;
@@ -1373,7 +1341,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     });
   }
 
-  /// Eingabe ohne Moduswechsel: Zahl antippen = Single, kleine Felder D/T darunter = Double/Triple.
   Widget _keys(void Function(Dart) onPick, void Function(VoidCallback) refresh, String lastLabel, VoidCallback onLast) {
     Widget big(String t, VoidCallback f) => Expanded(
         child: Padding(
@@ -1568,7 +1535,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
             child: AnimatedBuilder(
               animation: _pulse,
               builder: (_, child) {
-                // 8) Pulsierender Rahmen: 0.35 .. 1.0 Alpha
                 final pv = pulseActive ? (0.35 + 0.65 * _pulse.value) : 1.0;
                 return Container(
                     margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
@@ -1646,7 +1612,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                                   child: const Text('Erneut versuchen')),
                             ])))
                 : LayoutBuilder(builder: (_, cons) {
-                    // 5) Robuste Ausrichtung: Preview füllt den verfügbaren Platz, kein Verzerren
                     final size = cons.biggest;
                     final isPortrait = size.height >= size.width;
                     final camAspect = cc.value.aspectRatio;
@@ -1665,7 +1630,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                             height: h,
                             child: LayoutBuilder(builder: (_, k) {
                               final sz = Size(k.maxWidth, k.maxHeight);
-                              // Listener statt Pan: Punkte ziehen, aber Wischen zwischen den Seiten bleibt möglich
                               return Listener(
                                   onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
                                   onPointerMove: (e) => _panUpdate(e.delta, sz),
@@ -1683,7 +1647,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                                                 List.of(calib),
                                                 tip,
                                                 diagOn.value ? blob : const [],
-                                                // 1) Puls für Kalibrier-Kreise nur wenn noch nicht fertig
                                                 _pulse.value,
                                                 calib.length < 4)),
                                       ])));
@@ -1695,7 +1658,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
             Expanded(
                 child: OutlinedButton.icon(
                     onPressed: () => setState(() {
-                          // 7) Undo im Kamera-Modus: Erkennung sauber zurücksetzen
                           g.undo();
                           armed = false;
                           base = null;
@@ -1760,7 +1722,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
               child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
     }
 
-    // 9) Sätze/Legs klarer als "S x:y · L x:y"
     final infoBox = Column(mainAxisSize: MainAxisSize.min, children: [
       if (g.wm)
         Padding(
@@ -1795,7 +1756,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
           info = calib.length < 4
               ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
               : '${g.names[g.cur]} antippen für Referenzbild';
-          if (ctrl == null) _initCam(); // Kamera erst beim ersten Wischen starten
+          if (ctrl == null) _initCam();
         }
       }),
       children: [
@@ -1808,7 +1769,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     );
     final size = MediaQuery.of(c).size;
     if (size.width > size.height) {
-      // Querformat: links Spielstände, rechts Eingabe/Kamera
       return Scaffold(
           body: SafeArea(
               child: Row(children: [
@@ -1852,8 +1812,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   }
 }
 
-// ---------- Design-Bausteine ----------
-/// Dezentes Punktraster im Hintergrund (Nothing-Stil)
 class _Dots extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
@@ -1889,7 +1847,6 @@ const _glyph = {
   'r': ['00000', '00000', '10110', '11001', '10000', '10000', '10000'],
 };
 
-/// Text als Punktmatrix-Anzeige (5x7), unbelegte Punkte schwach sichtbar; reveal = spaltenweises Aufleuchten
 class DotNum extends StatelessWidget {
   final String text;
   final Color color;
@@ -1927,13 +1884,12 @@ class _DotNum extends CustomPainter {
   bool shouldRepaint(_DotNum o) => o.text != text || o.color != color || o.reveal != reveal;
 }
 
-/// Sieger: blinkender Titel, Name springt ein, Pixel-Konfetti in Teamfarbe
 class WinScreen extends StatefulWidget {
   final Game g;
   final String title, who, nextLabel;
   final List<String> lines;
   final VoidCallback onUndo, onNext, onMenu;
-  final bool sound; // Jubel-Musik (assets/win.mp3)
+  final bool sound;
   const WinScreen(
       {super.key,
       this.sound = false,
@@ -2034,7 +1990,6 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Einlauf: Teamfarbe, Name, Songtitel – ohne Konfetti und Statistik.
 class WalkInScreen extends StatefulWidget {
   final String name, title, artist, url;
   final Color color;
@@ -2151,7 +2106,7 @@ class _Confetti extends CustomPainter {
   _Confetti(this.t);
   @override
   void paint(Canvas c, Size s) {
-    final cols = [Colors.white, Colors.black, kViolet, kAccent, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
+    final cols = [Colors.white, Colors.black, kViolet, kAccent, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
     const n = 48;
     for (var i = 0; i < n; i++) {
       final x = (i * 0.618034 % 1) * s.width;
@@ -2165,10 +2120,9 @@ class _Confetti extends CustomPainter {
   bool shouldRepaint(_Confetti o) => o.t != t;
 }
 
-/// Logo: Punktmatrix-Scheibe in 90er-Farben mit hartem Schatten und Pfeil
 class LogoMark extends StatelessWidget {
   final double size;
-  final bool fixed; // feste dunkle Palette (Startbildschirm)
+  final bool fixed;
   const LogoMark(this.size, {super.key, this.fixed = false});
   @override
   Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _Logo(fixed));
@@ -2202,7 +2156,6 @@ class _Logo extends CustomPainter {
   bool shouldRepaint(_) => true;
 }
 
-/// Kurzer Startbildschirm, Tippen überspringt. 10) Mindestens 4s sichtbar.
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
   @override
@@ -2216,7 +2169,6 @@ class _SplashState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    // 10) Fester Timer statt AnimationController – zuverlässig 4 Sekunden
     _timer = Timer(const Duration(seconds: 4), _go);
   }
 
@@ -2224,11 +2176,13 @@ class _SplashState extends State<SplashPage> {
     if (gone || !mounted) return;
     gone = true;
     Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const ModePage(),
-            transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
-            transitionDuration: const Duration(milliseconds: 350)));
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const ModePage(),
+        transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
+        transitionDuration: const Duration(milliseconds: 350),
+      ),
+    );
   }
 
   @override
@@ -2238,48 +2192,59 @@ class _SplashState extends State<SplashPage> {
   }
 
   @override
-  Widget build(BuildContext c) => GestureDetector(
+  Widget build(BuildContext c) {
+    return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _go,
       child: Scaffold(
-          backgroundColor: const Color(0xFF09080F),
-          body: Center(
-              child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 700),
-                  curve: Curves.easeOut,
-                  builder: (_, v, child) => Opacity(opacity: v, child: child),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    // 11) Logo hat eine Mindestgröße (geclampt auf 90..200) – wird nie zu klein
-                    LayoutBuilder(builder: (_, cons) {
-                      final shortest = MediaQuery.of(c).size.shortestSide;
-                      final size = (shortest * 0.42).clamp(90.0, 200.0);
-                      return LogoMark(size, fixed: true);
-                    }),
-                    const SizedBox(height: 32),
-                    ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 40),
-                        child: const FittedBox(
-                            child: Text('StanDart',
-                                style: TextStyle(
-                                    fontSize: 56,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 3,
-                                    color: Colors.white,
-                                    shadows: [
-                                      Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
-                                      Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8)))
-                                    ])))),
-                  ])))));
+        backgroundColor: const Color(0xFF09080F),
+        body: Center(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeOut,
+            builder: (_, v, child) => Opacity(opacity: v, child: child),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LayoutBuilder(
+                  builder: (_, cons) {
+                    final shortest = MediaQuery.of(c).size.shortestSide;
+                    final size = (shortest * 0.42).clamp(90.0, 200.0);
+                    return LogoMark(size, fixed: true);
+                  },
+                ),
+                const SizedBox(height: 32),
+                const FittedBox(
+                  child: Text(
+                    'StanDart',
+                    style: TextStyle(
+                      fontSize: 56,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
+                        Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-// ---------- Kamera-Overlay ----------
 class _Overlay extends CustomPainter {
   final List<Offset> pts;
   final Offset? tip;
   final List<Offset> blob;
-  final double pulse;       // 1) Puls-Wert 0..1
-  final bool pulseActive;   // 1) nur wenn Kalibrierung noch läuft
+  final double pulse;
+  final bool pulseActive;
   _Overlay(this.pts, this.tip, this.blob, this.pulse, this.pulseActive);
   @override
   void paint(Canvas c, Size s) {
@@ -2293,7 +2258,6 @@ class _Overlay extends CustomPainter {
       ..strokeWidth = 0.8;
     Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
 
-    // 1) Pulsierender Kalibrier-Kreis: nur wenn noch nicht alle 4 Punkte gesetzt
     final pulsePaint = Paint()
       ..color = kAccent.withValues(alpha: pulseActive ? 0.35 + 0.65 * pulse : 1.0)
       ..style = PaintingStyle.stroke
@@ -2302,7 +2266,6 @@ class _Overlay extends CustomPainter {
       final isNext = pulseActive && i == pts.length - 1;
       c.drawCircle(sc(pts[i]), 7, isNext ? pulsePaint : thick);
       if (isNext) {
-        // zusätzlicher äußerer Puls-Ring
         c.drawCircle(sc(pts[i]), 12 + 6 * pulse, Paint()
           ..color = kAccent.withValues(alpha: 0.4 * (1 - pulse))
           ..style = PaintingStyle.stroke
@@ -2311,7 +2274,7 @@ class _Overlay extends CustomPainter {
     }
 
     if (pts.length == 4) {
-      final hb = homography(boardPts, pts); // Board -> Bild (normiert)
+      final hb = homography(boardPts, pts);
       Offset at(double r, double deg) {
         final t = deg * pi / 180;
         return sc(apply(hb, r * sin(t), -r * cos(t)));
