@@ -2270,7 +2270,7 @@ class _SplashState extends State<SplashPage> {
                                       Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
                                       Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8))
                                     ])))),
-                  ]))))))));
+                  ]))))));
 }
 
 // ---------- Kamera-Overlay ----------
