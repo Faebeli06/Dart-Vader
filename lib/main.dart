@@ -144,6 +144,8 @@ class Game {
     scores = List.filled(names.length, start);
     thrown = List.filled(names.length, 0);
     last = List.generate(names.length, (_) => <Dart>[]);
+    // F) turnStart sauber aus dem tatsächlichen Startwert des ersten Werfers setzen
+    turnStart = scores[cur];
   }
   String avg(int i) => thrown[i] == 0 ? '–' : ((done[i] + start - scores[i]) / thrown[i] * 3).toStringAsFixed(1);
   int _sum() => darts.fold<int>(0, (s, d) => s + d.points);
@@ -200,7 +202,8 @@ class Game {
     setWinner = null;
     final deciding = sets[0] == setsToWin - 1 && sets[1] == setsToWin - 1;
     final o = legs[1 - w];
-    final won = deciding && tieBreak ? ((legs[w] >= 3 && legs[w] - o >= 2) || legs[w] >= 6) : legs[w] >= 3;
+    // B) Entscheidungssatz: nur 2 Legs Vorsprung, kein festes Maximum
+    final won = deciding && tieBreak ? (legs[w] >= 3 && legs[w] - o >= 2) : legs[w] >= 3;
     if (won) {
       sets[w]++;
       setWinner = w;
@@ -225,6 +228,8 @@ class Game {
     darts = [];
     msg = null;
     held = false;
+    // C) Historie nach abgeschlossenem Leg bereinigen, damit sie nicht endlos wächst
+    hist.clear();
     cur = legStart;
     turnStart = start;
   }
@@ -319,7 +324,10 @@ int _cost(List<Dart> r, bool dbl) {
 
 /// Kürzester Weg auf 0 mit höchstens [left] Darts (bei Double-Out: letzter Dart ein Double).
 List<Dart>? checkout(int rem, bool dbl, int left) {
-  return _memo.putIfAbsent('$rem$dbl$left', () {
+  final key = '$rem$dbl$left';
+  // Build-Improvement 3: Cache begrenzen, damit er nicht endlos wächst
+  if (!_memo.containsKey(key) && _memo.length > 500) _memo.clear();
+  return _memo.putIfAbsent(key, () {
     for (var n = 1; n <= left; n++) {
       List<Dart>? best;
       var bc = 1 << 30;
@@ -358,13 +366,14 @@ void showSettings(BuildContext c) => showModalBottomSheet(
       builder: (c) => StatefulBuilder(
           builder: (c, set) => SafeArea(
                   child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // 12) Label invertiert: zeigt an, was der aktuelle Zustand ist
                 SwitchListTile(
-                    title: const Text('Helles Design'),
-                    value: !darkMode.value,
+                    title: Text(darkMode.value ? 'Dunkles Design' : 'Helles Design'),
+                    value: darkMode.value,
                     onChanged: (v) async {
-                      darkMode.value = !v;
+                      darkMode.value = v;
                       set(() {});
-                      (await SharedPreferences.getInstance()).setBool('dark', !v);
+                      (await SharedPreferences.getInstance()).setBool('dark', v);
                     }),
                 SwitchListTile(
                     title: const Text('Vibration'),
@@ -556,7 +565,7 @@ class ModePage extends StatelessWidget {
             decoration: BoxDecoration(
                 color: col,
                 borderRadius: BorderRadius.circular(22),
-                boxShadow: [BoxShadow(color: kInk.withOpacity(.3), offset: const Offset(6, 6))]),
+                boxShadow: [BoxShadow(color: kInk.withValues(alpha: .3), offset: const Offset(6, 6))]),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(small, style: TextStyle(color: txt, fontSize: 11, letterSpacing: 2)),
               const Spacer(),
@@ -730,7 +739,7 @@ class _SetupState extends State<SetupPage> {
                       ]),
                       const SizedBox(height: 10),
                       Text(
-                          'First to ${_setsTo[round]} Sätze · Satz = first to 3 Legs · 501 · Double-Out\nAnwurf wechselt je Leg und Satz.\nEntscheidungssatz: 2 Legs Vorsprung, bei 5:5 Sudden Death.',
+                          'First to ${_setsTo[round]} Sätze · Satz = first to 3 Legs · 501 · Double-Out\nAnwurf wechselt je Leg und Satz.\nEntscheidungssatz: 2 Legs Vorsprung.',
                           style: TextStyle(fontSize: 11, color: kDim)),
                     ])),
                 _sec(
@@ -1080,7 +1089,7 @@ class GamePage extends StatefulWidget {
   State<GamePage> createState() => _GameState();
 }
 
-class _GameState extends State<GamePage> {
+class _GameState extends State<GamePage> with TickerProviderStateMixin {
   Game get g => widget.g;
   CameraController? ctrl;
   img.Image? base;
@@ -1106,6 +1115,12 @@ class _GameState extends State<GamePage> {
   bool calDirty = true;
   String info = '';
   Timer? timer;
+
+  // 8) Puls für aktiven Spieler + Kalibrier-Kreise
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
 
   @override
   void initState() {
@@ -1184,6 +1199,7 @@ class _GameState extends State<GamePage> {
     timer?.cancel();
     pc.dispose();
     ctrl?.dispose();
+    _pulse.dispose();
     super.dispose();
   }
 
@@ -1368,7 +1384,7 @@ class _GameState extends State<GamePage> {
                 child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                        color: kInk.withOpacity(.07),
+                        color: kInk.withValues(alpha: .07),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: kLine, width: 1.5)),
                     child: FittedBox(child: Text(t, style: TextStyle(fontSize: 18, color: kInk)))))));
@@ -1378,7 +1394,7 @@ class _GameState extends State<GamePage> {
             child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                    color: kInk.withOpacity(.07),
+                    color: kInk.withValues(alpha: .07),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: kLine, width: 1.5)),
                 child: Column(children: [
@@ -1401,7 +1417,7 @@ class _GameState extends State<GamePage> {
                                   onTap: () => onPick(Dart(n, m)),
                                   child: Container(
                                       alignment: Alignment.center,
-                                      color: (m == 2 ? kViolet : teamColors[2]).withOpacity(.28),
+                                      color: (m == 2 ? kViolet : teamColors[2]).withValues(alpha: .28),
                                       child: Text(m == 2 ? 'D' : 'T',
                                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kInk))))),
                       ])),
@@ -1463,7 +1479,7 @@ class _GameState extends State<GamePage> {
 
   Widget _pill2(String t, int n, Color col) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: col.withOpacity(.6))),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: col.withValues(alpha: .6))),
       child: Text('$t $n', style: TextStyle(fontSize: 10, color: kInk, fontWeight: FontWeight.bold)));
 
   Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit) => Row(children: [
@@ -1500,6 +1516,42 @@ class _GameState extends State<GamePage> {
     final ds = cur ? g.darts : g.last[i];
     final nextI = (g.cur + 1) % g.names.length;
     final canEdit = cur && g.held && !manual;
+    final pulseActive = cur && g.winner == null && g.legWinner == null;
+
+    final Widget content = compact ? _compact(i, col, cur, ds, canEdit) : Column(children: [
+      Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
+      if (g.wm)
+        Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _pill2('SÄTZE', g.sets[i], col),
+              const SizedBox(width: 6),
+              _pill2('LEGS', g.legs[i], col),
+            ])),
+      const SizedBox(height: 4),
+      FittedBox(child: DotNum('${g.scores[i]}', kInk)),
+      Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}',
+          style: TextStyle(fontSize: 11, color: kDim)),
+      const SizedBox(height: 8),
+      Row(children: [
+        for (var k = 0; k < 3; k++)
+          Expanded(
+              child: GestureDetector(
+                  onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                  child: Container(
+                      height: 26,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                      child: k < ds.length
+                          ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk)))
+                          : null))),
+      ]),
+    ]);
+
     return Expanded(
         child: GestureDetector(
             onTap: () {
@@ -1513,47 +1565,29 @@ class _GameState extends State<GamePage> {
                 _arm();
               }
             },
-            child: Container(
-                margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
-                padding: EdgeInsets.all(compact ? 6 : 10),
-                decoration: BoxDecoration(
-                    color: kCard,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: cur || (g.held && i == nextI) ? col : kLine, width: cur ? 2 : 1.5),
-                    boxShadow: cur ? [BoxShadow(color: col, offset: const Offset(4, 4))] : null),
-                child: compact ? _compact(i, col, cur, ds, canEdit) : Column(children: [
-                  Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}',
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
-                  if (g.wm)
-                    Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          _pill2('SÄTZE', g.sets[i], col),
-                          const SizedBox(width: 6),
-                          _pill2('LEGS', g.legs[i], col),
-                        ])),
-                  const SizedBox(height: 4),
-                  FittedBox(child: DotNum('${g.scores[i]}', kInk)),
-                  Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}',
-                      style: TextStyle(fontSize: 11, color: kDim)),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    for (var k = 0; k < 3; k++)
-                      Expanded(
-                          child: GestureDetector(
-                              onTap: canEdit && k < ds.length ? () => _edit(k) : null,
-                              child: Container(
-                                  height: 26,
-                                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
-                                  child: k < ds.length
-                                      ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk)))
-                                      : null))),
-                  ]),
-                ]))));
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (_, child) {
+                // 8) Pulsierender Rahmen: 0.35 .. 1.0 Alpha
+                final pv = pulseActive ? (0.35 + 0.65 * _pulse.value) : 1.0;
+                return Container(
+                    margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
+                    padding: EdgeInsets.all(compact ? 6 : 10),
+                    decoration: BoxDecoration(
+                        color: kCard,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: cur
+                                ? col.withValues(alpha: pv)
+                                : (g.held && i == nextI ? col : kLine),
+                            width: cur ? 2 : 1.5),
+                        boxShadow: cur
+                            ? [BoxShadow(color: col.withValues(alpha: 0.45 * pv), offset: const Offset(4, 4))]
+                            : null),
+                    child: child);
+              },
+              child: content,
+            )));
   }
 
   List<String> _lines() => [
@@ -1611,35 +1645,69 @@ class _GameState extends State<GamePage> {
                                   },
                                   child: const Text('Erneut versuchen')),
                             ])))
-                : Center(
-                    child: AspectRatio(
-                        aspectRatio: MediaQuery.of(context).size.width > MediaQuery.of(context).size.height
-                            ? cc.value.aspectRatio
-                            : 1 / cc.value.aspectRatio,
-                        child: LayoutBuilder(builder: (_, k) {
-                          final sz = Size(k.maxWidth, k.maxHeight);
-                          // Listener statt Pan: Punkte ziehen, aber Wischen zwischen den Seiten bleibt möglich
-                          return Listener(
-                              onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
-                              onPointerMove: (e) => _panUpdate(e.delta, sz),
-                              onPointerUp: (_) {
-                                if (drag != null) saveCalib();
-                                setState(() => drag = null);
-                              },
-                              onPointerCancel: (_) => setState(() => drag = null),
-                              child: GestureDetector(
-                                  onTapUp: (t) => _calibTap(t.localPosition, sz),
-                                  child: Stack(fit: StackFit.expand, children: [
-                                    CameraPreview(cc),
-                                    CustomPaint(painter: _Overlay(List.of(calib), tip, diagOn.value ? blob : const [])),
-                                  ])));
-                        })))),
+                : LayoutBuilder(builder: (_, cons) {
+                    // 5) Robuste Ausrichtung: Preview füllt den verfügbaren Platz, kein Verzerren
+                    final size = cons.biggest;
+                    final isPortrait = size.height >= size.width;
+                    final camAspect = cc.value.aspectRatio;
+                    final previewAspect = isPortrait ? 1 / camAspect : camAspect;
+                    double w, h;
+                    if (size.width / previewAspect <= size.height) {
+                      w = size.width;
+                      h = w / previewAspect;
+                    } else {
+                      h = size.height;
+                      w = h * previewAspect;
+                    }
+                    return Center(
+                        child: SizedBox(
+                            width: w,
+                            height: h,
+                            child: LayoutBuilder(builder: (_, k) {
+                              final sz = Size(k.maxWidth, k.maxHeight);
+                              // Listener statt Pan: Punkte ziehen, aber Wischen zwischen den Seiten bleibt möglich
+                              return Listener(
+                                  onPointerDown: (e) => setState(() => _panStart(e.localPosition, sz)),
+                                  onPointerMove: (e) => _panUpdate(e.delta, sz),
+                                  onPointerUp: (_) {
+                                    if (drag != null) saveCalib();
+                                    setState(() => drag = null);
+                                  },
+                                  onPointerCancel: (_) => setState(() => drag = null),
+                                  child: GestureDetector(
+                                      onTapUp: (t) => _calibTap(t.localPosition, sz),
+                                      child: Stack(fit: StackFit.expand, children: [
+                                        CameraPreview(cc),
+                                        CustomPaint(
+                                            painter: _Overlay(
+                                                List.of(calib),
+                                                tip,
+                                                diagOn.value ? blob : const [],
+                                                // 1) Puls für Kalibrier-Kreise nur wenn noch nicht fertig
+                                                _pulse.value,
+                                                calib.length < 4)),
+                                      ])));
+                            })));
+                  })),
         Padding(
           padding: const EdgeInsets.all(8),
           child: Row(children: [
             Expanded(
                 child: OutlinedButton.icon(
-                    onPressed: () => setState(g.undo), icon: const Icon(Icons.undo), label: const Text('Undo'))),
+                    onPressed: () => setState(() {
+                          // 7) Undo im Kamera-Modus: Erkennung sauber zurücksetzen
+                          g.undo();
+                          armed = false;
+                          base = null;
+                          pending = null;
+                          prev = null;
+                          seen = 0;
+                          tip = null;
+                          blob = [];
+                          info = 'Undo – ${g.names[g.cur]} antippen für Referenzbild';
+                        }),
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Undo'))),
             const SizedBox(width: 8),
             Expanded(
                 child: OutlinedButton.icon(
@@ -1687,17 +1755,18 @@ class _GameState extends State<GamePage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
-                  color: on ? kAccent.withOpacity(.15) : null,
+                  color: on ? kAccent.withValues(alpha: .15) : null,
                   border: Border.all(color: on ? kAccent : kLine)),
               child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
     }
 
-    var info = Column(mainAxisSize: MainAxisSize.min, children: [
+    // 9) Sätze/Legs klarer als "S x:y · L x:y"
+    final infoBox = Column(mainAxisSize: MainAxisSize.min, children: [
       if (g.wm)
         Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Text(
-                'SATZ ${g.sets.fold<int>(0, (a, b) => a + b) + 1} · LEG ${g.legs.fold<int>(0, (a, b) => a + b) + 1}   |   FIRST TO ${g.setsToWin}'
+                'SATZ ${g.sets[0]}:${g.sets[1]}  ·  LEG ${g.legs[0]}:${g.legs[1]}   |   FIRST TO ${g.setsToWin}'
                 '${g.sets[0] == g.setsToWin - 1 && g.sets[1] == g.setsToWin - 1 ? '   |   ENTSCHEIDUNG' : ''}',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, letterSpacing: 2, color: kDim))),
@@ -1747,7 +1816,7 @@ class _GameState extends State<GamePage> {
             width: size.width * .38,
             child: Column(children: [
               Expanded(child: Column(children: [for (var i = 0; i < g.names.length; i++) _card(i, compact: true)])),
-              info,
+              infoBox,
             ])),
         Expanded(
             child: Column(children: [
@@ -1775,7 +1844,7 @@ class _GameState extends State<GamePage> {
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (var i = 0; i < g.names.length; i++) _card(i)
             ])),
-        info,
+        infoBox,
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
         Expanded(child: pager),
       ]),
@@ -1793,7 +1862,7 @@ class _Dots extends CustomPainter {
         for (var x = 10.0; x < s.width; x += 16) Offset(x, y)
     ];
     c.drawPoints(PointMode.points, pts,
-        Paint()..color = kInk.withOpacity(.07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
+        Paint()..color = kInk.withValues(alpha: .07)..strokeWidth = 2.2..strokeCap = StrokeCap.round);
   }
 
   @override
@@ -1843,7 +1912,7 @@ class _DotNum extends CustomPainter {
     final lit = reveal * text.length * 6;
     for (var i = 0; i < text.length; i++) {
       final col = multi ? teamColors[i % teamColors.length] : color;
-      final on = Paint()..color = col, off = Paint()..color = col.withOpacity(.10);
+      final on = Paint()..color = col, off = Paint()..color = col.withValues(alpha: .10);
       final g = _glyph[text[i]] ?? _glyph['–']!;
       for (var y = 0; y < 7; y++) {
         for (var x = 0; x < 5; x++) {
@@ -1982,269 +2051,4 @@ class WalkInScreen extends StatefulWidget {
   State<WalkInScreen> createState() => _WalkInState();
 }
 
-class _WalkInState extends State<WalkInScreen> with SingleTickerProviderStateMixin {
-  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-  final AudioPlayer _ap = AudioPlayer();
-  bool _done = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _ap.onPlayerComplete.listen((_) => _finish());
-    _ap.play(UrlSource(widget.url)).catchError((_) {
-      _finish();
-    });
-  }
-
-  void _finish() {
-    if (_done || !mounted) return;
-    _done = true;
-    widget.onDone();
-  }
-
-  @override
-  void dispose() {
-    _ap.stop();
-    _ap.dispose();
-    ac.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext c) => Scaffold(
-      backgroundColor: widget.color,
-      body: SafeArea(
-          child: LayoutBuilder(
-              builder: (_, k) => SingleChildScrollView(
-                  child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: k.maxHeight),
-                      child: IntrinsicHeight(
-                          child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                                const Spacer(),
-                                const Text('★ EINLAUF ★',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.black54, letterSpacing: 6, fontSize: 16)),
-                                const SizedBox(height: 16),
-                                TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0, end: 1),
-                                    duration: const Duration(milliseconds: 1000),
-                                    curve: Curves.elasticOut,
-                                    builder: (_, v, child) => Transform.scale(scale: v, child: child),
-                                    child: FittedBox(
-                                        child: Text(widget.name.toUpperCase(),
-                                            style: const TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 80,
-                                                fontWeight: FontWeight.bold,
-                                                shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
-                                const SizedBox(height: 28),
-                                Text(widget.title,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                Text(widget.artist,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.black87, fontSize: 15)),
-                                const Spacer(),
-                                SizedBox(
-                                    height: 56,
-                                    child: AnimatedBuilder(
-                                        animation: ac, builder: (_, __) => CustomPaint(painter: _Eq(ac.value)))),
-                                const SizedBox(height: 16),
-                                FilledButton(
-                                    style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
-                                    onPressed: _finish,
-                                    child: const Text('ÜBERSPRINGEN')),
-                              ]))))))));
-}
-
-class _Eq extends CustomPainter {
-  final double t;
-  _Eq(this.t);
-  @override
-  void paint(Canvas c, Size s) {
-    const n = 18;
-    final bw = s.width / (n * 1.6);
-    for (var i = 0; i < n; i++) {
-      final h = s.height * (.2 + .8 * sin(t * 2 * pi * (1 + i % 3) + i * 0.9).abs());
-      c.drawRect(Rect.fromLTWH(i * bw * 1.6, s.height - h, bw, h), Paint()..color = Colors.black.withOpacity(.85));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_Eq o) => o.t != t;
-}
-
-class _Confetti extends CustomPainter {
-  final double t;
-  _Confetti(this.t);
-  @override
-  void paint(Canvas c, Size s) {
-    final cols = [Colors.white, Colors.black, kViolet, kAccent, Color(0xFFFF5FA2), Color(0xFFFFD23F)];
-    const n = 48;
-    for (var i = 0; i < n; i++) {
-      final x = (i * 0.618034 % 1) * s.width;
-      final y = ((t * (1 + i % 2) + i / n) % 1) * (s.height + 20) - 10;
-      final sz = 6.0 + (i % 3) * 4;
-      c.drawRect(Rect.fromLTWH(x, y, sz, sz), Paint()..color = cols[i % cols.length].withOpacity(.85));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_Confetti o) => o.t != t;
-}
-
-/// Logo: Punktmatrix-Scheibe in 90er-Farben mit hartem Schatten und Pfeil
-class LogoMark extends StatelessWidget {
-  final double size;
-  final bool fixed; // feste dunkle Palette (Startbildschirm)
-  const LogoMark(this.size, {super.key, this.fixed = false});
-  @override
-  Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _Logo(fixed));
-}
-
-class _Logo extends CustomPainter {
-  final bool fixed;
-  _Logo(this.fixed);
-  @override
-  void paint(Canvas c, Size s) {
-    final u = s.width;
-    final ink = fixed ? const Color(0xFFF4F2FA) : kInk, acc = fixed ? const Color(0xFF1AE5D0) : kAccent;
-    final vio = fixed ? const Color(0xFF9A6BFF) : kViolet, pk = fixed ? const Color(0xFFFF5FA2) : teamColors[2];
-    for (var pass = 0; pass < 2; pass++) {
-      final off = pass == 0 ? u * .035 : 0.0;
-      c.save();
-      c.translate(u / 2 + off, u / 2 + off);
-      c.rotate(-pi / 4);
-      Paint p(Color col) => Paint()..color = pass == 0 ? ink.withOpacity(.3) : col;
-      c.drawPath(Path()..moveTo(-.46 * u, 0)..lineTo(-.34 * u, -.03 * u)..lineTo(-.34 * u, .03 * u)..close(), p(ink));
-      c.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTRB(-.34 * u, -.055 * u, -.08 * u, .055 * u), Radius.circular(.02 * u)), p(acc));
-      c.drawRect(Rect.fromLTRB(-.08 * u, -.018 * u, .14 * u, .018 * u), p(ink));
-      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, -.16 * u)..lineTo(.44 * u, -.16 * u)..lineTo(.34 * u, 0)..close(), p(vio));
-      c.drawPath(Path()..moveTo(.08 * u, 0)..lineTo(.2 * u, .16 * u)..lineTo(.44 * u, .16 * u)..lineTo(.34 * u, 0)..close(), p(pk));
-      c.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(_) => true;
-}
-
-/// Kurzer Startbildschirm, Tippen überspringt
-class SplashPage extends StatefulWidget {
-  const SplashPage({super.key});
-  @override
-  State<SplashPage> createState() => _SplashState();
-}
-
-class _SplashState extends State<SplashPage> with SingleTickerProviderStateMixin {
-  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 6500))
-    ..addStatusListener((st) {
-      if (st == AnimationStatus.completed) _go();
-    })
-    ..forward();
-  bool gone = false;
-  void _go() {
-    if (gone || !mounted) return;
-    gone = true;
-    Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const ModePage(),
-            transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
-            transitionDuration: const Duration(milliseconds: 250)));
-  }
-
-  @override
-  void dispose() {
-    ac.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext c) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _go,
-      child: Scaffold(
-          backgroundColor: const Color(0xFF09080F),
-          body: Center(
-              child: AnimatedBuilder(
-                  animation: ac,
-                  builder: (_, __) => Opacity(
-                      opacity: min(1.0, ac.value * 10),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        LogoMark(MediaQuery.of(c).size.height < 500 ? 110 : 170, fixed: true),
-                        const SizedBox(height: 32),
-                        const FittedBox(
-                            child: Text('StanDart',
-                                style: TextStyle(
-                                    fontSize: 56,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 3,
-                                    color: Colors.white,
-                                    shadows: [
-                                      Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
-                                      Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8))
-                                    ]))),
-                      ]))))));
-}
-
-// ---------- Kamera-Overlay ----------
-class _Overlay extends CustomPainter {
-  final List<Offset> pts;
-  final Offset? tip;
-  final List<Offset> blob;
-  _Overlay(this.pts, this.tip, this.blob);
-  @override
-  void paint(Canvas c, Size s) {
-    final thick = Paint()
-      ..color = kAccent
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    final thin = Paint()
-      ..color = kAccent.withOpacity(.7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
-    Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
-    for (final o in pts) {
-      c.drawCircle(sc(o), 7, thick);
-    }
-    if (pts.length == 4) {
-      final hb = homography(boardPts, pts); // Board -> Bild (normiert)
-      Offset at(double r, double deg) {
-        final t = deg * pi / 180;
-        return sc(apply(hb, r * sin(t), -r * cos(t)));
-      }
-
-      for (final r in [1.0, 0.953, 0.629, 0.582, 0.094, 0.037]) {
-        final path = Path();
-        for (var i = 0; i <= 72; i++) {
-          final q = at(r, i * 5.0);
-          i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
-        }
-        c.drawPath(path, r == 1.0 ? thick : thin);
-      }
-      for (var k = 0; k < 20; k++) {
-        c.drawLine(at(0.094, 9.0 + 18 * k), at(1.0, 9.0 + 18 * k), thin);
-        final tp = TextPainter(
-            text: TextSpan(text: '${order[k]}', style: const TextStyle(color: Colors.white70, fontSize: 10)),
-            textDirection: TextDirection.ltr)
-          ..layout();
-        tp.paint(c, at(1.1, 18.0 * k) - Offset(tp.width / 2, tp.height / 2));
-      }
-    }
-    final bp = Paint()..color = kViolet.withOpacity(.6);
-    for (final o in blob) {
-      c.drawCircle(sc(o), 1.6, bp);
-    }
-    if (tip != null) {
-      c.drawCircle(sc(tip!), 6, Paint()..color = kViolet);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_) => true;
-}
+class _WalkInState extends State<WalkInScreen> with SingleTickerProviderState
