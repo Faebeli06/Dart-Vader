@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpClient;
+import 'dart:io' show HttpClient, File;
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' show PointMode;
