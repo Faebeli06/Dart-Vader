@@ -11,43 +11,50 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
+// ----- Theme-Notifier -----
+/// darkSetting: null = automatisch (System), true = dunkel, false = hell
+final darkSetting = ValueNotifier<bool?>(null);
 final darkMode = ValueNotifier<bool>(true);
 final vibOn = ValueNotifier<bool>(true);
 final soundOn = ValueNotifier<bool>(true);
 final diagOn = ValueNotifier<bool>(false);
 final autoFit = ValueNotifier<bool>(true);
 String diagWhy = '';
-Color kBg = const Color(0xFF09080F);
-Color kCard = const Color(0xFF14121C);
-Color kLine = const Color(0xFF2B2838);
+
+// ----- Retro-Palette (satter, weniger pastellig) -----
+// Dark: echte 90s-Neon auf tiefem Schwarz
+// Light: warmes Beige + kräftige Primärfarben (Memphis)
+Color kBg = const Color(0xFF0A0910);
+Color kCard = const Color(0xFF16141F);
+Color kLine = const Color(0xFF2E2A3D);
 Color kInk = const Color(0xFFF4F2FA);
-Color kDim = const Color(0xFF9A97A8);
+Color kDim = const Color(0xFF9793A8);
 Color kOnAccent = Colors.black;
-Color kAccent = const Color(0xFF1AE5D0);
+Color kAccent = const Color(0xFF00E5C8);
 Color kViolet = const Color(0xFF9A6BFF);
-List<Color> teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
+List<Color> teamColors = [kAccent, kViolet, const Color(0xFFFF3D8B), const Color(0xFFFFD100)];
 
 void applyTheme(bool d) {
   if (d) {
-    kBg = const Color(0xFF09080F);
-    kCard = const Color(0xFF14121C);
-    kLine = const Color(0xFF2B2838);
+    kBg = const Color(0xFF0A0910);
+    kCard = const Color(0xFF16141F);
+    kLine = const Color(0xFF2E2A3D);
     kInk = const Color(0xFFF4F2FA);
-    kDim = const Color(0xFF9A97A8);
+    kDim = const Color(0xFF9793A8);
     kOnAccent = Colors.black;
-    kAccent = const Color(0xFF1AE5D0);
+    kAccent = const Color(0xFF00E5C8);
     kViolet = const Color(0xFF9A6BFF);
-    teamColors = [kAccent, kViolet, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
+    teamColors = [kAccent, kViolet, const Color(0xFFFF3D8B), const Color(0xFFFFD100)];
   } else {
-    kBg = const Color(0xFFF1E7D3);
-    kCard = const Color(0xFFFBF5E6);
-    kLine = const Color(0xFFC9BB9C);
-    kInk = const Color(0xFF1B1A22);
-    kDim = const Color(0xFF6B6558);
+    kBg = const Color(0xFFEFE3C8);
+    kCard = const Color(0xFFF8EEDA);
+    kLine = const Color(0xFFBFB08C);
+    kInk = const Color(0xFF1A1620);
+    kDim = const Color(0xFF6A5F4C);
     kOnAccent = Colors.white;
-    kAccent = const Color(0xFF2563EB);
-    kViolet = const Color(0xFFE63B2E);
-    teamColors = [kAccent, kViolet, const Color(0xFFFF8A00), const Color(0xFFE0A800)];
+    kAccent = const Color(0xFF0043CE);
+    kViolet = const Color(0xFFD32029);
+    teamColors = [kAccent, kViolet, const Color(0xFFFF6A00), const Color(0xFFB58A00)];
   }
 }
 
@@ -56,7 +63,6 @@ void feedback() {
   if (soundOn.value) SystemSound.play(SystemSoundType.click);
 }
 
-/// Retro-Beep-Sequenz (3 Beeps) – z. B. bei 180
 Future<void> sound180() async {
   if (!soundOn.value) return;
   for (var i = 0; i < 3; i++) {
@@ -65,7 +71,6 @@ Future<void> sound180() async {
   }
 }
 
-/// Retro-Jubel (5 Beeps) – z. B. bei Big Fish (Finish ≥ 100)
 Future<void> soundBigFish() async {
   if (!soundOn.value) return;
   for (var i = 0; i < 5; i++) {
@@ -118,7 +123,9 @@ ThemeData appTheme(bool d) {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final p = await SharedPreferences.getInstance();
-  darkMode.value = p.getBool('dark') ?? true;
+  // dark gespeichert als: 0 = hell, 1 = dunkel, fehlt = automatisch
+  final dv = p.getInt('dark');
+  darkSetting.value = dv == null ? null : dv == 1;
   vibOn.value = p.getBool('vib') ?? true;
   soundOn.value = p.getBool('snd') ?? true;
   diagOn.value = p.getBool('diag') ?? false;
@@ -127,19 +134,62 @@ Future<void> main() async {
   if (cs != null && cs.length == 4) {
     calib = [for (final s in cs) Offset(double.parse(s.split(',')[0]), double.parse(s.split(',')[1]))];
   }
-  runApp(ValueListenableBuilder<bool>(
-    valueListenable: darkMode,
-    builder: (_, d, __) {
-      applyTheme(d);
-      return MaterialApp(
-        title: 'StanDart',
-        debugShowCheckedModeBanner: false,
-        builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
-        theme: appTheme(d),
-        home: const SplashPage(),
-      );
-    },
-  ));
+  runApp(const StanDartApp());
+}
+
+class StanDartApp extends StatefulWidget {
+  const StanDartApp({super.key});
+  @override
+  State<StanDartApp> createState() => _StanDartAppState();
+}
+
+class _StanDartAppState extends State<StanDartApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    darkSetting.addListener(_sync);
+    _sync();
+  }
+
+  @override
+  void dispose() {
+    darkSetting.removeListener(_sync);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    _sync();
+  }
+
+  void _sync() {
+    final sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    final wantDark = darkSetting.value ?? sysDark;
+    if (darkMode.value != wantDark) {
+      darkMode.value = wantDark;
+    } else {
+      setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext c) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: darkMode,
+      builder: (_, d, __) {
+        applyTheme(d);
+        return MaterialApp(
+          title: 'StanDart',
+          debugShowCheckedModeBanner: false,
+          builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
+          theme: appTheme(d),
+          home: const SplashPage(),
+        );
+      },
+    );
+  }
 }
 
 const order = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
@@ -168,15 +218,46 @@ Dart fromBoard(double dx, double dy) {
   return Dart(n, 1);
 }
 
+// ---------- Spielerprofil ----------
+class Profile {
+  final String name;
+  final Song? song;
+  const Profile(this.name, this.song);
+  String toJson() => jsonEncode({'n': name, 's': song?.toJson()});
+  static Profile? from(String? s) {
+    if (s == null) return null;
+    try {
+      final m = jsonDecode(s) as Map;
+      return Profile('${m['n']}', Song.from(m['s'] as String?));
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+Future<List<Profile>> loadProfiles() async {
+  final p = await SharedPreferences.getInstance();
+  final list = p.getStringList('profiles') ?? [];
+  return [for (final s in list) if (Profile.from(s) != null) Profile.from(s)!];
+}
+
+Future<void> saveProfiles(List<Profile> profiles) async {
+  final p = await SharedPreferences.getInstance();
+  await p.setStringList('profiles', [for (final pr in profiles) pr.toJson()]);
+}
+
 class Game {
   final List<String> names;
   final int start;
   final bool dbl;
+  final bool doubleIn;   // Double-In aktiv?
+  final bool masterOut;  // Master-Out (Triple oder Double beendet)
   late List<int> scores;
   late List<int> thrown;
   late List<List<Dart>> last;
   int cur = 0;
   int turnStart;
+  bool opened = false;   // Double-In schon getroffen?
   List<Dart> darts = [];
   String? winner;
   String? msg;
@@ -192,13 +273,15 @@ class Game {
   int setStart = 0;
   int? legWinner;
   int? setWinner;
-  // Statistik:
-  late List<int> tons;      // 180er
-  late List<int> highFin;   // Checkouts >= 100
-  late List<int> bestTurn;  // höchster 3-Dart-Zug
+  late List<int> tons;
+  late List<int> highFin;
+  late List<int> bestTurn;
+  late List<int> count170;   // 170er
   final hist = <List<Object?>>[];
 
-  Game(this.names, this.start, this.dbl, {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0}) : turnStart = start {
+  Game(this.names, this.start, this.dbl,
+      {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0, this.doubleIn = false, this.masterOut = false})
+      : turnStart = start {
     cur = first;
     legStart = first;
     setStart = first;
@@ -210,8 +293,10 @@ class Game {
     tons = List.filled(names.length, 0);
     highFin = List.filled(names.length, 0);
     bestTurn = List.filled(names.length, 0);
+    count170 = List.filled(names.length, 0);
     last = List.generate(names.length, (_) => <Dart>[]);
     turnStart = scores[cur];
+    opened = !doubleIn;
   }
 
   String avg(int i) {
@@ -235,7 +320,28 @@ class Game {
     thrown[cur]++;
     darts.add(d);
     final rem = turnStart - _sum();
-    final bust = rem < 0 || (dbl && rem == 1) || (rem == 0 && dbl && d.m != 2);
+    // Double-In: erst öffnen
+    final needOpen = doubleIn && !opened;
+    if (needOpen && d.m == 2) opened = true;
+    bool bust;
+    if (needOpen && !opened) {
+      // noch nicht geöffnet → Punkte zählen nicht (kein Bust), aber Darts zählen
+      bust = false;
+      // turn score bleibt 0 effektiv
+      if (darts.length == 3) {
+        final sum = _sum();
+        if (sum > bestTurn[cur]) bestTurn[cur] = sum;
+        if (hold) {
+          held = true;
+        } else {
+          _next();
+        }
+      }
+      return;
+    }
+    // Master-Out: letzter Wurf muss D oder T sein
+    final outOk = masterOut ? (d.m == 2 || d.m == 3) : (d.m == 2);
+    bust = rem < 0 || (dbl && rem == 1) || (rem == 0 && dbl && !outOk);
     if (bust) {
       scores[cur] = turnStart;
       msg = 'Bust!';
@@ -248,8 +354,9 @@ class Game {
     }
     scores[cur] = rem;
     if (rem == 0) {
-      // Checkout! – Finish-Höhe ist turnStart
-      if (turnStart >= 100) highFin[cur]++;
+      final finish = turnStart;
+      if (finish >= 100) highFin[cur]++;
+      if (finish == 170) count170[cur]++;
       if (wm) {
         _legWon();
       } else {
@@ -274,6 +381,7 @@ class Game {
     cur = (cur + 1) % names.length;
     darts = [];
     turnStart = scores[cur];
+    opened = !doubleIn;
   }
 
   void _legWon() {
@@ -313,6 +421,7 @@ class Game {
     hist.clear();
     cur = legStart;
     turnStart = start;
+    opened = !doubleIn;
   }
 
   void _save() {
@@ -336,6 +445,8 @@ class Game {
       List<int>.of(tons),
       List<int>.of(highFin),
       List<int>.of(bestTurn),
+      List<int>.of(count170),
+      opened,
     ]);
   }
 
@@ -379,6 +490,8 @@ class Game {
     tons = h[16] as List<int>;
     highFin = h[17] as List<int>;
     bestTurn = h[18] as List<int>;
+    count170 = h[19] as List<int>;
+    opened = h[20] as bool;
   }
 }
 
@@ -443,22 +556,43 @@ List<Dart>? checkout(int rem, bool dbl, int left) {
   });
 }
 
+// ---------- Einstellungen ----------
 void showSettings(BuildContext c) {
   showModalBottomSheet(
     context: c,
     isScrollControlled: true,
     builder: (ctx) {
       return StatefulBuilder(builder: (ctx, set) {
+        Future<void> persistDark() async {
+          final p = await SharedPreferences.getInstance();
+          if (darkSetting.value == null) {
+            await p.remove('dark');
+          } else {
+            await p.setInt('dark', darkSetting.value! ? 1 : 0);
+          }
+        }
         return SafeArea(child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SwitchListTile(
-            title: Text(darkMode.value ? 'Dunkles Design' : 'Helles Design'),
-            value: darkMode.value,
-            onChanged: (v) async {
-              darkMode.value = v;
-              set(() {});
-              final p = await SharedPreferences.getInstance();
-              p.setBool('dark', v);
-            },
+          const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('EINSTELLUNGEN', style: TextStyle(letterSpacing: 3))),
+          // Design-Auswahl: Auto / Hell / Dunkel
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('DESIGN', style: TextStyle(letterSpacing: 2, color: kDim, fontSize: 11)),
+              const SizedBox(height: 6),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 0, icon: Icon(Icons.brightness_auto, size: 16), label: Text('AUTO')),
+                  ButtonSegment(value: 1, icon: Icon(Icons.light_mode, size: 16), label: Text('HELL')),
+                  ButtonSegment(value: 2, icon: Icon(Icons.dark_mode, size: 16), label: Text('DUNKEL')),
+                ],
+                selected: {darkSetting.value == null ? 0 : (darkSetting.value! ? 2 : 1)},
+                onSelectionChanged: (s) {
+                  darkSetting.value = s.first == 0 ? null : s.first == 2;
+                  persistDark();
+                  set(() {});
+                },
+              ),
+            ]),
           ),
           SwitchListTile(
             title: const Text('Vibration'),
@@ -516,6 +650,7 @@ void showSettings(BuildContext c) {
   );
 }
 
+// ---------- Song + Profile ----------
 class Song {
   final int id;
   final String title;
@@ -548,7 +683,6 @@ Future<Song?> pickSong(BuildContext c) async {
   return await Navigator.push<Song>(c, MaterialPageRoute(builder: (_) => const SongPickerPage()));
 }
 
-/// Eigene Seite für den Song-Picker. Tastatur schiebt nichts hoch (Suchfeld bleibt oben).
 class SongPickerPage extends StatefulWidget {
   const SongPickerPage({super.key});
   @override
@@ -606,9 +740,7 @@ class _SongPickerState extends State<SongPickerPage> {
       final list = <Map<String, dynamic>>[];
       final data = j['data'] as List? ?? [];
       for (final e in data) {
-        if (e is Map<String, dynamic> && '${e['preview'] ?? ''}'.isNotEmpty) {
-          list.add(e);
-        }
+        if (e is Map<String, dynamic> && '${e['preview'] ?? ''}'.isNotEmpty) list.add(e);
       }
       if (mounted) {
         setState(() {
@@ -684,6 +816,7 @@ class _SongPickerState extends State<SongPickerPage> {
   }
 }
 
+// ---------- Modus-Auswahl ----------
 class ModePage extends StatelessWidget {
   const ModePage({super.key});
 
@@ -696,12 +829,33 @@ class ModePage extends StatelessWidget {
         decoration: BoxDecoration(
           color: col,
           borderRadius: BorderRadius.circular(22),
-          boxShadow: [BoxShadow(color: kInk.withValues(alpha: .3), offset: const Offset(6, 6))],
+          boxShadow: [BoxShadow(color: kInk.withValues(alpha: .35), offset: const Offset(6, 6))],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(small, style: TextStyle(color: txt, fontSize: 11, letterSpacing: 2)),
           const Spacer(),
           FittedBox(child: Text(big, style: TextStyle(color: txt, fontSize: 60, fontWeight: FontWeight.w900))),
+        ]),
+      ),
+    );
+  }
+
+  Widget smallTile(IconData i, String label, VoidCallback f, {Color? accent}) {
+    final col = accent ?? kAccent;
+    return GestureDetector(
+      onTap: f,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: kCard,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: col, width: 1.5),
+          boxShadow: [BoxShadow(color: col, offset: const Offset(3, 3))],
+        ),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(i, color: col, size: 22),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(color: col, fontSize: 10, letterSpacing: 1.5)),
         ]),
       ),
     );
@@ -716,20 +870,30 @@ class ModePage extends StatelessWidget {
           Navigator.push(c, MaterialPageRoute(builder: (_) => SetupPage(startPts: pts, wm: wm)));
         }
         return Scaffold(
-          appBar: AppBar(title: const Text('MODUS WÄHLEN'), actions: [
-            IconButton(icon: const Icon(Icons.settings), onPressed: () => showSettings(c)),
-          ]),
-          body: GridView.count(
-            crossAxisCount: MediaQuery.of(c).size.width > MediaQuery.of(c).size.height ? 4 : 2,
-            mainAxisSpacing: 22,
-            crossAxisSpacing: 22,
+          appBar: AppBar(title: const Text('STAN DART')),
+          body: Padding(
             padding: const EdgeInsets.all(24),
-            children: [
-              tile('501', 'FREIES SPIEL', teamColors[0], () => go(501, false)),
-              tile('301', 'FREIES SPIEL', teamColors[1], () => go(301, false)),
-              tile('701', 'FREIES SPIEL', teamColors[2], () => go(701, false)),
-              tile('WM', 'SÄTZE & LEGS', teamColors[3], () => go(null, true)),
-            ],
+            child: Column(children: [
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: MediaQuery.of(c).size.width > MediaQuery.of(c).size.height ? 4 : 2,
+                  mainAxisSpacing: 22,
+                  crossAxisSpacing: 22,
+                  children: [
+                    tile('501', 'FREIES SPIEL', teamColors[0], () => go(501, false)),
+                    tile('301', 'FREIES SPIEL', teamColors[1], () => go(301, false)),
+                    tile('701', 'FREIES SPIEL', teamColors[2], () => go(701, false)),
+                    tile('WM', 'SÄTZE & LEGS', teamColors[3], () => go(null, true)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: smallTile(Icons.tune, 'EINSTELLUNGEN', () => showSettings(c))),
+                const SizedBox(width: 12),
+                Expanded(child: smallTile(Icons.people, 'PROFILE', () => Navigator.push(c, MaterialPageRoute(builder: (_) => const ProfilesPage())), accent: kViolet)),
+              ]),
+            ]),
           ),
         );
       },
@@ -737,6 +901,112 @@ class ModePage extends StatelessWidget {
   }
 }
 
+// ---------- Profile-Verwaltung ----------
+class ProfilesPage extends StatefulWidget {
+  const ProfilesPage({super.key});
+  @override
+  State<ProfilesPage> createState() => _ProfilesPageState();
+}
+
+class _ProfilesPageState extends State<ProfilesPage> {
+  List<Profile> profiles = [];
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final p = await loadProfiles();
+    if (mounted) {
+      setState(() {
+        profiles = p;
+        loading = false;
+      });
+    }
+  }
+
+  Future<void> _add() async {
+    final nameC = TextEditingController();
+    Song? song;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: const Text('NEUES PROFIL'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Name')),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final s = await pickSong(c);
+                if (s != null) {
+                  song = s;
+                  set(() {});
+                }
+              },
+              icon: Icon(song == null ? Icons.music_note : Icons.check_circle, color: song == null ? kAccent : teamColors[2], size: 24),
+              label: Text(song == null ? 'SONG WÄHLEN' : 'SONG BESTÄTIGT'),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('ABBRECHEN')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('SPEICHERN')),
+          ],
+        ),
+      ),
+    );
+    if (ok == true && nameC.text.trim().isNotEmpty) {
+      profiles.add(Profile(nameC.text.trim(), song));
+      await saveProfiles(profiles);
+      setState(() {});
+    }
+  }
+
+  Future<void> _delete(int i) async {
+    profiles.removeAt(i);
+    await saveProfiles(profiles);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext c) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PROFILE')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                for (var i = 0; i < profiles.length; i++)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: kLine, width: 1.5)),
+                    child: Row(children: [
+                      Icon(Icons.person, color: teamColors[i % teamColors.length]),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(profiles[i].name, style: TextStyle(color: kInk, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 2),
+                          Text(profiles[i].song == null ? 'kein Song' : '♪ Song hinterlegt', style: TextStyle(color: kDim, fontSize: 11)),
+                        ]),
+                      ),
+                      IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _delete(i)),
+                    ]),
+                  ),
+                const SizedBox(height: 10),
+                FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: const Text('PROFIL HINZUFÜGEN')),
+              ],
+            ),
+    );
+  }
+}
+
+// ---------- Setup ----------
 class SetupPage extends StatefulWidget {
   final int? startPts;
   final bool wm;
@@ -751,13 +1021,46 @@ class _SetupState extends State<SetupPage> {
   int round = 1;
   int first = 0;
   bool dbl = true;
+  bool doubleIn = false;
+  bool masterOut = false;
   bool wm = false;
   static const _rounds = ['Runde 1 (kein Tie-Break)', 'Runde 2', 'Runde 3/4', 'Viertelfinale', 'Halbfinale', 'Finale'];
   static const _setsTo = [3, 3, 4, 5, 6, 7];
-  final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
+  final ctr = [for (var i = 1; i <= 4; i++) TextEditingController()];
   final songs = List<Song?>.filled(4, null);
+  List<Profile> profiles = [];
 
   int get n => wm ? 2 : players;
+
+  @override
+  void initState() {
+    super.initState();
+    wm = widget.wm;
+    if (widget.startPts != null) start = widget.startPts!;
+    SharedPreferences.getInstance().then((p) {
+      if (!mounted) return;
+      setState(() {
+        players = p.getInt('players') ?? players;
+        start = widget.startPts ?? p.getInt('start') ?? start;
+        dbl = p.getBool('dbl') ?? dbl;
+        doubleIn = p.getBool('dblin') ?? false;
+        masterOut = p.getBool('masterout') ?? false;
+      });
+    });
+    loadProfiles().then((v) {
+      if (mounted) setState(() => profiles = v);
+    });
+    // Wichtig: keine Namen/Songs vorbelegen (jeder neue Spieler soll frisch starten)
+  }
+
+  Future<void> _saveSetup() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('players', players);
+    await p.setInt('start', start);
+    await p.setBool('dbl', dbl);
+    await p.setBool('dblin', doubleIn);
+    await p.setBool('masterout', masterOut);
+  }
 
   Widget _sec(String t, Widget child) {
     return Container(
@@ -775,32 +1078,46 @@ class _SetupState extends State<SetupPage> {
   Widget _nameRow(int i) {
     final hasSong = songs[i] != null;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(children: [
-        TextField(
-          controller: ctr[i],
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            labelText: 'Name ${i + 1}',
-            prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
-            suffixIcon: IconButton(
-              tooltip: 'Einlaufsong',
-              icon: Icon(Icons.music_note, size: 20, color: hasSong ? kAccent : kDim),
-              onPressed: () async {
-                final s = await pickSong(context);
-                if (s != null) setState(() => songs[i] = s);
-              },
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: ctr[i],
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Name ${i + 1}',
+                prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              ),
             ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
           ),
-        ),
+          const SizedBox(width: 8),
+          // Auffälliger Musik-Button (größer, farbig, mit Label-Feedback)
+          GestureDetector(
+            onTap: () async {
+              final s = await pickSong(context);
+              if (s != null) setState(() => songs[i] = s);
+            },
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: hasSong ? teamColors[2] : kAccent,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: hasSong ? teamColors[2] : kAccent, offset: const Offset(3, 3))],
+              ),
+              child: Icon(hasSong ? Icons.music_note : Icons.library_music, color: hasSong ? Colors.white : kOnAccent, size: 26),
+            ),
+          ),
+        ]),
         if (hasSong)
           Padding(
-            padding: const EdgeInsets.only(left: 12, right: 4, top: 4),
+            padding: const EdgeInsets.only(left: 4, right: 4, top: 6),
             child: Row(children: [
-              Icon(Icons.check_circle, color: kAccent, size: 14),
+              Icon(Icons.check_circle, color: teamColors[2], size: 14),
               const SizedBox(width: 6),
-              Text('SONG BESTÄTIGT', style: TextStyle(color: kAccent, fontSize: 10, letterSpacing: 2)),
+              Text('SONG BESTÄTIGT', style: TextStyle(color: teamColors[2], fontSize: 10, letterSpacing: 2)),
               const Spacer(),
               GestureDetector(
                 onTap: () => setState(() => songs[i] = null),
@@ -811,53 +1128,41 @@ class _SetupState extends State<SetupPage> {
               ),
             ]),
           ),
+        if (profiles.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: PopupMenuButton<int>(
+                tooltip: 'Profil laden',
+                onSelected: (idx) {
+                  setState(() {
+                    ctr[i].text = profiles[idx].name;
+                    songs[i] = profiles[idx].song;
+                  });
+                },
+                itemBuilder: (_) => [
+                  for (var k = 0; k < profiles.length; k++)
+                    PopupMenuItem(value: k, child: Text(profiles[k].name)),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: kLine)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.person_search, size: 14, color: kDim),
+                    const SizedBox(width: 6),
+                    Text('PROFIL LADEN', style: TextStyle(color: kDim, fontSize: 10, letterSpacing: 1.5)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
       ]),
     );
   }
 
   Widget _names() {
-    return Column(children: [
-      for (var i = 0; i < n; i++) _nameRow(i),
-    ]);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    wm = widget.wm;
-    if (widget.startPts != null) start = widget.startPts!;
-    SharedPreferences.getInstance().then((p) {
-      if (!mounted) return;
-      final nn = p.getStringList('names');
-      setState(() {
-        players = p.getInt('players') ?? players;
-        start = widget.startPts ?? p.getInt('start') ?? start;
-        dbl = p.getBool('dbl') ?? dbl;
-        for (var i = 0; i < 4; i++) {
-          songs[i] = Song.from(p.getString('song$i'));
-        }
-        if (nn != null) {
-          for (var i = 0; i < nn.length && i < 4; i++) {
-            ctr[i].text = nn[i];
-          }
-        }
-      });
-    });
-  }
-
-  Future<void> _saveSetup() async {
-    final p = await SharedPreferences.getInstance();
-    await p.setInt('players', players);
-    await p.setInt('start', start);
-    await p.setBool('dbl', dbl);
-    await p.setStringList('names', [for (final t in ctr) t.text]);
-    for (var i = 0; i < 4; i++) {
-      if (songs[i] == null) {
-        await p.remove('song$i');
-      } else {
-        await p.setString('song$i', songs[i]!.toJson());
-      }
-    }
+    return Column(children: [for (var i = 0; i < n; i++) _nameRow(i)]);
   }
 
   void _startGame(BuildContext c) {
@@ -867,7 +1172,9 @@ class _SetupState extends State<SetupPage> {
       final t = ctr[i].text.trim();
       names.add(t.isEmpty ? 'Spieler ${i + 1}' : t);
     }
-    final g = Game(names, wm ? 501 : start, wm ? true : dbl, wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first);
+    final g = Game(names, wm ? 501 : start, wm ? true : dbl,
+        wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first,
+        doubleIn: wm ? false : doubleIn, masterOut: wm ? false : masterOut);
     final songList = songs.sublist(0, n);
     Navigator.push(c, MaterialPageRoute(builder: (_) => GamePage(g, songs: songList)));
   }
@@ -896,16 +1203,31 @@ class _SetupState extends State<SetupPage> {
                     ]))
                   else
                     _sec('SPIELER', _names()),
-                  if (!wm)
+                  if (!wm) ...[
                     _sec('SPIEL $start', Column(children: [
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Double-Out'),
+                        subtitle: const Text('Finish nur mit Doppel'),
                         value: dbl,
                         onChanged: (v) => setState(() => dbl = v),
                       ),
-                    ]))
-                  else ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Double-In'),
+                        subtitle: const Text('Erst mit Doppel ins Spiel kommen'),
+                        value: doubleIn,
+                        onChanged: (v) => setState(() => doubleIn = v),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Master-Out'),
+                        subtitle: const Text('Finish mit Doppel oder Triple'),
+                        value: masterOut,
+                        onChanged: (v) => setState(() => masterOut = v),
+                      ),
+                    ])),
+                  ] else ...[
                     _sec('FORMAT', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Wrap(spacing: 8, children: [
                         for (var i = 0; i < _rounds.length; i++)
@@ -934,6 +1256,7 @@ class _SetupState extends State<SetupPage> {
   }
 }
 
+// ---------- Kalibrierung / Perspektive ----------
 List<Offset> calib = [];
 final boardPts = [for (final a in [9, 99, 189, 279]) Offset(sin(a * pi / 180), -cos(a * pi / 180))];
 const calibNames = ['20|1 (oben)', '6|10 (rechts)', '3|19 (unten)', '11|14 (links)'];
@@ -1233,6 +1556,7 @@ Det? detect(img.Image a, img.Image b) {
   return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length, [for (var i = 0; i < pts.length; i += max(1, pts.length ~/ 300)) pts[i]]);
 }
 
+// ---------- Spielseite ----------
 class GamePage extends StatefulWidget {
   final Game g;
   final List<Song?> songs;
@@ -1357,6 +1681,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     feedback();
     final oldTons = g.tons[g.cur];
     final oldFin = g.highFin[g.cur];
+    final old170 = g.count170[g.cur];
     setState(() {
       g.add(d);
       if (g.winner != null) {
@@ -1373,7 +1698,9 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         info = 'Erkannt: ${d.label}';
       }
     });
-    if (g.tons[g.cur] > oldTons) {
+    if (g.count170[g.cur] > old170) {
+      sound180();
+    } else if (g.tons[g.cur] > oldTons) {
       sound180();
     } else if (g.highFin[g.cur] > oldFin) {
       soundBigFish();
@@ -1552,7 +1879,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                         onTap: () => onPick(Dart(n, m)),
                         child: Container(
                           alignment: Alignment.center,
-                          color: (m == 2 ? kViolet : teamColors[2]).withValues(alpha: .28),
+                          color: (m == 2 ? kViolet : teamColors[2]).withValues(alpha: .32),
                           child: Text(m == 2 ? 'D' : 'T', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kInk)),
                         ),
                       ),
@@ -1656,6 +1983,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         _statRow('Ø', g.avg(i)),
         _statRow('DARTS', '${g.thrown[i]}'),
         _statRow('180er', '${g.tons[i]}'),
+        _statRow('170er', '${g.count170[i]}'),
         _statRow('HIGH FINISH', '${g.highFin[i]}'),
         _statRow('BESTER ZUG', g.bestTurn[i] == 0 ? '–' : '${g.bestTurn[i]}'),
         if (g.wm) _statRow('SÄTZE / LEGS', '${g.sets[i]} / ${g.legs[i]}'),
@@ -1681,7 +2009,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit, double pulseVal) {
+  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit) {
     return Row(children: [
       Expanded(
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -1735,7 +2063,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         child: AnimatedBuilder(
           animation: _pulse,
           builder: (_, child) {
-            // Retro-Puls: Rahmenbreite + Schatten-Offset pulsieren (kein Alpha-Fading)
             final double borderW = cur ? (pulseActive ? 2.0 + 1.4 * _pulse.value : 2.0) : 1.5;
             final double shadowOff = cur && pulseActive ? 3.0 + 3.0 * _pulse.value : 4.0;
             return Container(
@@ -1747,37 +2074,39 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                 border: Border.all(color: cur ? col : (g.held && i == nextI ? col : kLine), width: borderW),
                 boxShadow: cur ? [BoxShadow(color: col, offset: Offset(shadowOff, shadowOff))] : null,
               ),
-              child: compact ? _compact(i, col, cur, ds, canEdit, _pulse.value) : Column(children: [
-                Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
-                if (g.wm)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      _pill2('SÄTZE', g.sets[i], col),
-                      const SizedBox(width: 6),
-                      _pill2('LEGS', g.legs[i], col),
-                    ]),
-                  ),
-                const SizedBox(height: 4),
-                FittedBox(child: DotNum('${g.scores[i]}', kInk)),
-                Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}', style: TextStyle(fontSize: 11, color: kDim)),
-                const SizedBox(height: 8),
-                Row(children: [
-                  for (var k = 0; k < 3; k++)
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: canEdit && k < ds.length ? () => _edit(k) : null,
-                        child: Container(
-                          height: 26,
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
-                          child: k < ds.length ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk))) : null,
+              child: compact
+                  ? _compact(i, col, cur, ds, canEdit)
+                  : Column(children: [
+                      Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
+                      if (g.wm)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            _pill2('SÄTZE', g.sets[i], col),
+                            const SizedBox(width: 6),
+                            _pill2('LEGS', g.legs[i], col),
+                          ]),
                         ),
-                      ),
-                    ),
-                ]),
-              ]),
+                      const SizedBox(height: 4),
+                      FittedBox(child: DotNum('${g.scores[i]}', kInk)),
+                      Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}', style: TextStyle(fontSize: 11, color: kDim)),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        for (var k = 0; k < 3; k++)
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                              child: Container(
+                                height: 26,
+                                margin: const EdgeInsets.symmetric(horizontal: 2),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                                child: k < ds.length ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk))) : null,
+                              ),
+                            ),
+                          ),
+                      ]),
+                    ]),
             );
           },
         ),
@@ -1803,7 +2132,8 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       onUndo: () => setState(g.undo),
       onNext: () => Navigator.pushReplacement(
         c,
-        MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl, wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak), songs: widget.songs)),
+        MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl,
+            wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak, doubleIn: g.doubleIn, masterOut: g.masterOut), songs: widget.songs)),
       ),
       onMenu: () => Navigator.pop(c),
     );
@@ -1982,7 +2312,8 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          if (g.msg != null) const Text('BUST   ', style: TextStyle(color: Color(0xFFFF6B8A), letterSpacing: 2, fontSize: 14)),
+          if (g.msg != null) const Text('BUST   ', style: TextStyle(color: Color(0xFFFF3D8B), letterSpacing: 2, fontSize: 14)),
+          if (g.doubleIn && !g.opened) Text('DOUBLE-IN OFFEN   ', style: TextStyle(color: kAccent, letterSpacing: 2, fontSize: 11)),
           if (route != null) ...[
             Text('CHECKOUT  ', style: TextStyle(color: kDim, letterSpacing: 2, fontSize: 11)),
             Text(route.map((d) => d.label).join(' · '), style: TextStyle(color: kViolet, fontSize: 18)),
@@ -2030,11 +2361,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                   pill(0, 'MANUELL'),
                   pill(1, 'KAMERA'),
                   IconButton(icon: const Icon(Icons.bar_chart, size: 18), onPressed: _showStats),
-                  if (!manual) ...[
-                    const SizedBox(width: 4),
-                    const Text('Auto'),
-                    Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
-                  ],
                 ]),
                 Expanded(child: pager),
               ]),
@@ -2048,8 +2374,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'),
         actions: [
           IconButton(icon: const Icon(Icons.bar_chart), tooltip: 'Statistik', onPressed: _showStats),
-          if (!manual) const Text('Auto'),
-          if (!manual) Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
         ],
       ),
       body: Column(children: [
@@ -2209,7 +2533,7 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
                         animation: ac,
                         builder: (_, __) => Opacity(
                           opacity: (ac.value * 10).floor() % 2 == 0 ? 1 : .3,
-                          child: Text('★ ${widget.title} ★', textAlign: TextAlign.center, style: TextStyle(color: Colors.black, letterSpacing: 6, fontSize: 18)),
+                          child: Text('★ ${widget.title} ★', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black, letterSpacing: 6, fontSize: 18)),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -2349,7 +2673,7 @@ class _Confetti extends CustomPainter {
   _Confetti(this.t);
   @override
   void paint(Canvas c, Size s) {
-    final cols = [Colors.white, Colors.black, kViolet, kAccent, const Color(0xFFFF5FA2), const Color(0xFFFFD23F)];
+    final cols = [Colors.white, Colors.black, kViolet, kAccent, const Color(0xFFFF3D8B), const Color(0xFFFFD100)];
     const n = 48;
     for (var i = 0; i < n; i++) {
       final x = (i * 0.618034 % 1) * s.width;
@@ -2377,10 +2701,10 @@ class _Logo extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final u = s.width;
-    final ink = fixed ? kInk : kInk;
-    final acc = fixed ? kAccent : kAccent;
-    final vio = fixed ? kViolet : kViolet;
-    final pk = fixed ? teamColors[2] : teamColors[2];
+    final ink = kInk;
+    final acc = kAccent;
+    final vio = kViolet;
+    final pk = teamColors[2];
     for (var pass = 0; pass < 2; pass++) {
       final off = pass == 0 ? u * .035 : 0.0;
       c.save();
@@ -2413,7 +2737,6 @@ class _SplashState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    // Splash effektiv 1.25s sichtbar
     _timer = Timer(const Duration(milliseconds: 1250), _go);
   }
 
@@ -2438,7 +2761,6 @@ class _SplashState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext c) {
-    // Splash passt sich an aktuelles Theme an
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _go,
@@ -2465,10 +2787,7 @@ class _SplashState extends State<SplashPage> {
                     fontWeight: FontWeight.w900,
                     letterSpacing: 3,
                     color: kInk,
-                    shadows: [
-                      Shadow(color: kAccent, offset: const Offset(4, 4)),
-                      Shadow(color: kViolet, offset: const Offset(8, 8)),
-                    ],
+                    shadows: [Shadow(color: kAccent, offset: const Offset(4, 4)), Shadow(color: kViolet, offset: const Offset(8, 8))],
                   ),
                 ),
               ),
@@ -2494,7 +2813,6 @@ class _Overlay extends CustomPainter {
     final thin = Paint()..color = kAccent.withValues(alpha: .7)..style = PaintingStyle.stroke..strokeWidth = 0.8;
     Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
 
-    // Kalibrier-Punkt: äußerer Puls-Ring (Retro-Look)
     for (var i = 0; i < pts.length; i++) {
       final isNext = pulseActive && i == pts.length - 1;
       c.drawCircle(sc(pts[i]), 7, thick);
