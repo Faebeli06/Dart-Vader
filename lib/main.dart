@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show HttpClient;
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' show PointMode;
@@ -407,6 +409,141 @@ void showSettings(BuildContext c) => showModalBottomSheet(
                     }),
               ])))));
 
+// ---------- Einlaufsongs (Deezer, 30-s-Vorschau) ----------
+class Song {
+  final int id;
+  final String title, artist;
+  const Song(this.id, this.title, this.artist);
+  String toJson() => jsonEncode({'id': id, 't': title, 'a': artist});
+  static Song? from(String? s) {
+    if (s == null) return null;
+    try {
+      final m = jsonDecode(s) as Map;
+      return Song(m['id'] as int, '${m['t']}', '${m['a']}');
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+Future<dynamic> deezerJson(String url) async {
+  final h = HttpClient();
+  try {
+    final req = await h.getUrl(Uri.parse(url));
+    final res = await req.close().timeout(const Duration(seconds: 10));
+    return jsonDecode(await res.transform(utf8.decoder).join());
+  } finally {
+    h.close();
+  }
+}
+
+Future<Song?> pickSong(BuildContext c) =>
+    showModalBottomSheet<Song>(context: c, isScrollControlled: true, builder: (_) => const _SongPicker());
+
+class _SongPicker extends StatefulWidget {
+  const _SongPicker();
+  @override
+  State<_SongPicker> createState() => _SongPickerState();
+}
+
+class _SongPickerState extends State<_SongPicker> {
+  final q = TextEditingController();
+  final ap = AudioPlayer();
+  List<Map<String, dynamic>> res = [];
+  bool busy = false;
+  String? err;
+  int? playing;
+
+  @override
+  void initState() {
+    super.initState();
+    ap.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => playing = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    ap.stop();
+    ap.dispose();
+    q.dispose();
+    super.dispose();
+  }
+
+  Future<void> search() async {
+    final t = q.text.trim();
+    if (t.isEmpty) return;
+    setState(() {
+      busy = true;
+      err = null;
+    });
+    try {
+      final j = await deezerJson('https://api.deezer.com/search?q=${Uri.encodeQueryComponent(t)}&limit=20');
+      final list = [
+        for (final e in (j['data'] as List? ?? []))
+          if (e is Map<String, dynamic> && '${e['preview'] ?? ''}'.isNotEmpty) e
+      ];
+      if (mounted) {
+        setState(() {
+          res = list;
+          busy = false;
+          if (list.isEmpty) err = 'Nichts gefunden';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          err = 'Suche fehlgeschlagen – ist das Internet an?';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext c) => SafeArea(
+      child: Padding(
+          padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + MediaQuery.of(c).viewInsets.bottom),
+          child: SizedBox(
+              height: MediaQuery.of(c).size.height * .75,
+              child: Column(children: [
+                TextField(
+                    controller: q,
+                    autofocus: true,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => search(),
+                    decoration: InputDecoration(
+                        labelText: 'Song oder Interpret suchen (Deezer)',
+                        suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: search),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)))),
+                const SizedBox(height: 8),
+                if (busy) const LinearProgressIndicator(),
+                if (err != null) Padding(padding: const EdgeInsets.all(8), child: Text(err!, style: TextStyle(color: kDim))),
+                Expanded(
+                    child: ListView(children: [
+                  for (final e in res)
+                    ListTile(
+                        title: Text('${e['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text('${(e['artist'] as Map?)?['name'] ?? ''}', maxLines: 1),
+                        trailing: IconButton(
+                            icon: Icon(playing == e['id'] ? Icons.stop : Icons.play_arrow),
+                            onPressed: () async {
+                              if (playing == e['id']) {
+                                await ap.stop();
+                                setState(() => playing = null);
+                                return;
+                              }
+                              setState(() => playing = e['id'] as int);
+                              try {
+                                await ap.play(UrlSource('${e['preview']}'));
+                              } catch (_) {}
+                            }),
+                        onTap: () => Navigator.pop(
+                            c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'))),
+                ])),
+              ]))));
+}
+
 // ---------- Modus-Auswahl (Startseite) ----------
 class ModePage extends StatelessWidget {
   const ModePage({super.key});
@@ -467,6 +604,7 @@ class _SetupState extends State<SetupPage> {
   static const _setsTo = [3, 3, 4, 5, 6, 7];
   int get n => wm ? 2 : players;
   final ctr = [for (var i = 1; i <= 4; i++) TextEditingController(text: 'Spieler $i')];
+  final songs = List<Song?>.filled(4, null);
 
   Widget _sec(String t, Widget child) => Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -479,8 +617,24 @@ class _SetupState extends State<SetupPage> {
         child
       ]));
 
+  Widget _songRow(int i) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(children: [
+        Expanded(
+            child: OutlinedButton.icon(
+                onPressed: () async {
+                  final s = await pickSong(context);
+                  if (s != null) setState(() => songs[i] = s);
+                },
+                icon: const Icon(Icons.music_note, size: 18),
+                label: Text(songs[i] == null ? 'EINLAUFSONG WÄHLEN' : '${songs[i]!.title} – ${songs[i]!.artist}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis))),
+        if (songs[i] != null)
+          IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => songs[i] = null)),
+      ]));
+
   Widget _names() => Column(children: [
-        for (var i = 0; i < n; i++)
+        for (var i = 0; i < n; i++) ...[
           Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: TextField(
@@ -489,7 +643,9 @@ class _SetupState extends State<SetupPage> {
                   decoration: InputDecoration(
                       labelText: 'Name ${i + 1}',
                       prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)))))
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))),
+          if (wm) _songRow(i),
+        ]
       ]);
 
   @override
@@ -504,6 +660,9 @@ class _SetupState extends State<SetupPage> {
         players = p.getInt('players') ?? players;
         start = widget.startPts ?? p.getInt('start') ?? start;
         dbl = p.getBool('dbl') ?? dbl;
+        for (var i = 0; i < 4; i++) {
+          songs[i] = Song.from(p.getString('song$i'));
+        }
         if (n != null) {
           for (var i = 0; i < n.length && i < 4; i++) {
             ctr[i].text = n[i];
@@ -519,6 +678,13 @@ class _SetupState extends State<SetupPage> {
     await p.setInt('start', start);
     await p.setBool('dbl', dbl);
     await p.setStringList('names', [for (final t in ctr) t.text]);
+    for (var i = 0; i < 4; i++) {
+      if (songs[i] == null) {
+        await p.remove('song$i');
+      } else {
+        await p.setString('song$i', songs[i]!.toJson());
+      }
+    }
   }
 
   @override
@@ -588,7 +754,7 @@ class _SetupState extends State<SetupPage> {
                               for (var i = 0; i < n; i++)
                                 ctr[i].text.trim().isEmpty ? 'Spieler ${i + 1}' : ctr[i].text.trim()
                             ], wm ? 501 : start, wm ? true : dbl,
-                            wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first))));
+                            wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first), songs: wm ? songs.sublist(0, 2) : const <Song?>[])));
                 },
                 child: const Text('Spiel starten')),
           ]),
@@ -908,7 +1074,8 @@ Det? detect(img.Image a, img.Image b) {
 // ---------- Spiel ----------
 class GamePage extends StatefulWidget {
   final Game g;
-  const GamePage(this.g, {super.key});
+  final List<Song?> songs; // Einlaufsongs (WM), je Spieler
+  const GamePage(this.g, {super.key, this.songs = const []});
   @override
   State<GamePage> createState() => _GameState();
 }
@@ -921,6 +1088,10 @@ class _GameState extends State<GamePage> {
   Det? pending;
   Offset? tip;
   String? camErr;
+  List<int> walk = [];
+  int walkIdx = 0;
+  bool walkLoading = false;
+  final walkUrls = <int, String>{};
   bool camStarting = false;
   List<Offset> blob = [];
   bool locked = false;
@@ -943,7 +1114,32 @@ class _GameState extends State<GamePage> {
         ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an'
         : '${g.names[g.cur]} antippen, um zu starten';
     g.hold = false; // Manuell: Spielerwechsel automatisch
+    walkLoading = g.wm && soundOn.value && widget.songs.any((s) => s != null);
+    if (walkLoading) _prepareWalkIns();
     timer = Timer.periodic(const Duration(milliseconds: 900), (_) => _tick());
+  }
+
+  /// Holt frische Vorschau-Links (Deezer-Links laufen ab) und startet danach die Einläufe.
+  Future<void> _prepareWalkIns() async {
+    final list = <int>[];
+    for (var i = 0; i < widget.songs.length; i++) {
+      final sg = widget.songs[i];
+      if (sg == null) continue;
+      try {
+        final j = await deezerJson('https://api.deezer.com/track/${sg.id}');
+        final u = '${j['preview'] ?? ''}';
+        if (u.isNotEmpty) {
+          walkUrls[i] = u;
+          list.add(i);
+        }
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        walk = list;
+        walkLoading = false;
+      });
+    }
   }
 
   Future<void> _initCam() async {
@@ -1376,7 +1572,7 @@ class _GameState extends State<GamePage> {
       onNext: () => Navigator.pushReplacement(
           c,
           MaterialPageRoute(
-              builder: (_) => GamePage(Game(g.names, g.start, g.dbl, wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak)))),
+              builder: (_) => GamePage(Game(g.names, g.start, g.dbl, wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak), songs: widget.songs))),
       onMenu: () => Navigator.pop(c));
 
   Widget _legScreen(BuildContext c) => WinScreen(
@@ -1463,6 +1659,21 @@ class _GameState extends State<GamePage> {
 
   @override
   Widget build(BuildContext c) {
+    if (walkLoading) {
+      return Scaffold(
+          body: Center(child: Text('EINLAUF WIRD GELADEN …', style: TextStyle(color: kDim, letterSpacing: 2))));
+    }
+    if (walkIdx < walk.length) {
+      final i = walk[walkIdx], sg = widget.songs[i]!;
+      return WalkInScreen(
+          key: ValueKey(i),
+          name: g.names[i],
+          color: teamColors[i % teamColors.length],
+          title: sg.title,
+          artist: sg.artist,
+          url: walkUrls[i]!,
+          onDone: () => setState(() => walkIdx++));
+    }
     if (g.winner != null) return _win(c);
     if (g.legWinner != null) return _legScreen(c);
     final rem = g.scores[g.cur];
@@ -1481,7 +1692,7 @@ class _GameState extends State<GamePage> {
               child: Text(t, style: const TextStyle(fontSize: 11, letterSpacing: 2))));
     }
 
-    final infoColumn = Column(mainAxisSize: MainAxisSize.min, children: [
+    final info = Column(mainAxisSize: MainAxisSize.min, children: [
       if (g.wm)
         Padding(
             padding: const EdgeInsets.only(top: 2),
@@ -1536,7 +1747,7 @@ class _GameState extends State<GamePage> {
             width: size.width * .38,
             child: Column(children: [
               Expanded(child: Column(children: [for (var i = 0; i < g.names.length; i++) _card(i, compact: true)])),
-              infoColumn,
+              info,
             ])),
         Expanded(
             child: Column(children: [
@@ -1564,7 +1775,7 @@ class _GameState extends State<GamePage> {
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (var i = 0; i < g.names.length; i++) _card(i)
             ])),
-        infoColumn,
+        info,
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [pill(0, 'MANUELL'), pill(1, 'KAMERA')]),
         Expanded(child: pager),
       ]),
@@ -1752,6 +1963,118 @@ class _WinState extends State<WinScreen> with SingleTickerProviderStateMixin {
                   ]))))))),
         ]));
   }
+}
+
+/// Einlauf: Teamfarbe, Name, Songtitel – ohne Konfetti und Statistik.
+class WalkInScreen extends StatefulWidget {
+  final String name, title, artist, url;
+  final Color color;
+  final VoidCallback onDone;
+  const WalkInScreen(
+      {super.key,
+      required this.name,
+      required this.title,
+      required this.artist,
+      required this.url,
+      required this.color,
+      required this.onDone});
+  @override
+  State<WalkInScreen> createState() => _WalkInState();
+}
+
+class _WalkInState extends State<WalkInScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController ac = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+  final AudioPlayer _ap = AudioPlayer();
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ap.onPlayerComplete.listen((_) => _finish());
+    _ap.play(UrlSource(widget.url)).catchError((_) {
+      _finish();
+    });
+  }
+
+  void _finish() {
+    if (_done || !mounted) return;
+    _done = true;
+    widget.onDone();
+  }
+
+  @override
+  void dispose() {
+    _ap.stop();
+    _ap.dispose();
+    ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) => Scaffold(
+      backgroundColor: widget.color,
+      body: SafeArea(
+          child: LayoutBuilder(
+              builder: (_, k) => SingleChildScrollView(
+                  child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: k.maxHeight),
+                      child: IntrinsicHeight(
+                          child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                const Spacer(),
+                                const Text('★ EINLAUF ★',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.black54, letterSpacing: 6, fontSize: 16)),
+                                const SizedBox(height: 16),
+                                TweenAnimationBuilder<double>(
+                                    tween: Tween(begin: 0, end: 1),
+                                    duration: const Duration(milliseconds: 1000),
+                                    curve: Curves.elasticOut,
+                                    builder: (_, v, child) => Transform.scale(scale: v, child: child),
+                                    child: FittedBox(
+                                        child: Text(widget.name.toUpperCase(),
+                                            style: const TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 80,
+                                                fontWeight: FontWeight.bold,
+                                                shadows: [Shadow(color: Colors.white, offset: Offset(5, 5))])))),
+                                const SizedBox(height: 28),
+                                Text(widget.title,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Text(widget.artist,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: Colors.black87, fontSize: 15)),
+                                const Spacer(),
+                                SizedBox(
+                                    height: 56,
+                                    child: AnimatedBuilder(
+                                        animation: ac, builder: (_, __) => CustomPaint(painter: _Eq(ac.value)))),
+                                const SizedBox(height: 16),
+                                FilledButton(
+                                    style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                                    onPressed: _finish,
+                                    child: const Text('ÜBERSPRINGEN')),
+                              ]))))))));
+}
+
+class _Eq extends CustomPainter {
+  final double t;
+  _Eq(this.t);
+  @override
+  void paint(Canvas c, Size s) {
+    const n = 18;
+    final bw = s.width / (n * 1.6);
+    for (var i = 0; i < n; i++) {
+      final h = s.height * (.2 + .8 * sin(t * 2 * pi * (1 + i % 3) + i * 0.9).abs());
+      c.drawRect(Rect.fromLTWH(i * bw * 1.6, s.height - h, bw, h), Paint()..color = Colors.black.withOpacity(.85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Eq o) => o.t != t;
 }
 
 class _Confetti extends CustomPainter {
