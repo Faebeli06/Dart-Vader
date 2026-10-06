@@ -23,7 +23,9 @@ jobs:
           flutter create . --platforms=android --project-name dart_counter
           cp /tmp/main.dart lib/main.dart
           cp /tmp/pubspec.yaml pubspec.yaml
-          sed -i 's#<application#<uses-permission android:name="android.permission.CAMERA"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.CAMERA"/>\n    
+sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+<application#' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="StanDart"/' android/app/src/main/AndroidManifest.xml
       - name: Android-Startbild ohne rundes Icon
         run: |
