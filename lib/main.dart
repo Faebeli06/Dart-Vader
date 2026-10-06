@@ -56,6 +56,24 @@ void feedback() {
   if (soundOn.value) SystemSound.play(SystemSoundType.click);
 }
 
+/// Retro-Beep-Sequenz (3 Beeps) – z. B. bei 180
+Future<void> sound180() async {
+  if (!soundOn.value) return;
+  for (var i = 0; i < 3; i++) {
+    SystemSound.play(SystemSoundType.click);
+    await Future.delayed(const Duration(milliseconds: 90));
+  }
+}
+
+/// Retro-Jubel (5 Beeps) – z. B. bei Big Fish (Finish ≥ 100)
+Future<void> soundBigFish() async {
+  if (!soundOn.value) return;
+  for (var i = 0; i < 5; i++) {
+    SystemSound.play(SystemSoundType.click);
+    await Future.delayed(const Duration(milliseconds: 70));
+  }
+}
+
 Future<void> saveCalib() async {
   final p = await SharedPreferences.getInstance();
   if (calib.length == 4) {
@@ -174,6 +192,10 @@ class Game {
   int setStart = 0;
   int? legWinner;
   int? setWinner;
+  // Statistik:
+  late List<int> tons;      // 180er
+  late List<int> highFin;   // Checkouts >= 100
+  late List<int> bestTurn;  // höchster 3-Dart-Zug
   final hist = <List<Object?>>[];
 
   Game(this.names, this.start, this.dbl, {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0}) : turnStart = start {
@@ -185,6 +207,9 @@ class Game {
     done = List.filled(names.length, 0);
     scores = List.filled(names.length, start);
     thrown = List.filled(names.length, 0);
+    tons = List.filled(names.length, 0);
+    highFin = List.filled(names.length, 0);
+    bestTurn = List.filled(names.length, 0);
     last = List.generate(names.length, (_) => <Dart>[]);
     turnStart = scores[cur];
   }
@@ -223,6 +248,8 @@ class Game {
     }
     scores[cur] = rem;
     if (rem == 0) {
+      // Checkout! – Finish-Höhe ist turnStart
+      if (turnStart >= 100) highFin[cur]++;
       if (wm) {
         _legWon();
       } else {
@@ -231,6 +258,9 @@ class Game {
       return;
     }
     if (darts.length == 3) {
+      final sum = _sum();
+      if (sum == 180) tons[cur]++;
+      if (sum > bestTurn[cur]) bestTurn[cur] = sum;
       if (hold) {
         held = true;
       } else {
@@ -303,6 +333,9 @@ class Game {
       setStart,
       legWinner,
       setWinner,
+      List<int>.of(tons),
+      List<int>.of(highFin),
+      List<int>.of(bestTurn),
     ]);
   }
 
@@ -343,6 +376,9 @@ class Game {
     setStart = h[13] as int;
     legWinner = h[14] as int?;
     setWinner = h[15] as int?;
+    tons = h[16] as List<int>;
+    highFin = h[17] as List<int>;
+    bestTurn = h[18] as List<int>;
   }
 }
 
@@ -508,23 +544,25 @@ Future<dynamic> deezerJson(String url) async {
   }
 }
 
-Future<Song?> pickSong(BuildContext c) {
-  return showModalBottomSheet<Song>(context: c, isScrollControlled: true, builder: (_) => const _SongPicker());
+Future<Song?> pickSong(BuildContext c) async {
+  return await Navigator.push<Song>(c, MaterialPageRoute(builder: (_) => const SongPickerPage()));
 }
 
-class _SongPicker extends StatefulWidget {
-  const _SongPicker();
+/// Eigene Seite für den Song-Picker. Tastatur schiebt nichts hoch (Suchfeld bleibt oben).
+class SongPickerPage extends StatefulWidget {
+  const SongPickerPage({super.key});
   @override
-  State<_SongPicker> createState() => _SongPickerState();
+  State<SongPickerPage> createState() => _SongPickerState();
 }
 
-class _SongPickerState extends State<_SongPicker> {
+class _SongPickerState extends State<SongPickerPage> {
   final q = TextEditingController();
   final ap = AudioPlayer();
   List<Map<String, dynamic>> res = [];
   bool busy = false;
   String? err;
   int? playing;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -536,10 +574,24 @@ class _SongPickerState extends State<_SongPicker> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     ap.stop();
     ap.dispose();
     q.dispose();
     super.dispose();
+  }
+
+  void _onChanged(String v) {
+    _debounce?.cancel();
+    if (v.trim().isEmpty) {
+      setState(() {
+        res = [];
+        err = null;
+        busy = false;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 400), search);
   }
 
   Future<void> search() async {
@@ -569,7 +621,7 @@ class _SongPickerState extends State<_SongPicker> {
       if (mounted) {
         setState(() {
           busy = false;
-          err = 'Suche fehlgeschlagen – ist das Internet an?';
+          err = 'Suche fehlgeschlagen – Internet?';
         });
       }
     }
@@ -577,16 +629,19 @@ class _SongPickerState extends State<_SongPicker> {
 
   @override
   Widget build(BuildContext c) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + MediaQuery.of(c).viewInsets.bottom),
-        child: SizedBox(
-          height: MediaQuery.of(c).size.height * .75,
-          child: Column(children: [
-            TextField(
+    return Scaffold(
+      backgroundColor: kBg,
+      resizeToAvoidBottomInset: false,
+      appBar: AppBar(title: const Text('EINLAUFSONG')),
+      body: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: TextField(
               controller: q,
               autofocus: true,
               textInputAction: TextInputAction.search,
+              onChanged: _onChanged,
               onSubmitted: (_) => search(),
               decoration: InputDecoration(
                 labelText: 'Song oder Interpret suchen (Deezer)',
@@ -594,37 +649,36 @@ class _SongPickerState extends State<_SongPicker> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
-            const SizedBox(height: 8),
-            if (busy) const LinearProgressIndicator(),
-            if (err != null) Padding(padding: const EdgeInsets.all(8), child: Text(err!, style: TextStyle(color: kDim))),
-            Expanded(
-              child: ListView(children: [
-                for (final e in res)
-                  ListTile(
-                    title: Text('${e['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('${(e['artist'] as Map?)?['name'] ?? ''}', maxLines: 1),
-                    trailing: IconButton(
-                      icon: Icon(playing == e['id'] ? Icons.stop : Icons.play_arrow),
-                      onPressed: () async {
-                        if (playing == e['id']) {
-                          await ap.stop();
-                          setState(() => playing = null);
-                          return;
-                        }
-                        setState(() => playing = e['id'] as int);
-                        try {
-                          await ap.play(UrlSource('${e['preview']}'));
-                        } catch (_) {}
-                      },
-                    ),
-                    onTap: () {
-                      Navigator.pop(c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'));
+          ),
+          if (busy) const Padding(padding: EdgeInsets.symmetric(horizontal: 14), child: LinearProgressIndicator()),
+          if (err != null) Padding(padding: const EdgeInsets.all(8), child: Text(err!, style: TextStyle(color: kDim))),
+          Expanded(
+            child: ListView(children: [
+              for (final e in res)
+                ListTile(
+                  title: Text('${e['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${(e['artist'] as Map?)?['name'] ?? ''}', maxLines: 1),
+                  trailing: IconButton(
+                    icon: Icon(playing == e['id'] ? Icons.stop : Icons.play_arrow),
+                    onPressed: () async {
+                      if (playing == e['id']) {
+                        await ap.stop();
+                        setState(() => playing = null);
+                        return;
+                      }
+                      setState(() => playing = e['id'] as int);
+                      try {
+                        await ap.play(UrlSource('${e['preview']}'));
+                      } catch (_) {}
                     },
                   ),
-              ]),
-            ),
-          ]),
-        ),
+                  onTap: () {
+                    Navigator.pop(c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'));
+                  },
+                ),
+            ]),
+          ),
+        ]),
       ),
     );
   }
@@ -718,42 +772,52 @@ class _SetupState extends State<SetupPage> {
     );
   }
 
-  Widget _songRow(int i) {
+  Widget _nameRow(int i) {
+    final hasSong = songs[i] != null;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () async {
-              final s = await pickSong(context);
-              if (s != null) setState(() => songs[i] = s);
-            },
-            icon: const Icon(Icons.music_note, size: 18),
-            label: Text(songs[i] == null ? 'EINLAUFSONG WÄHLEN' : '${songs[i]!.title} – ${songs[i]!.artist}', maxLines: 1, overflow: TextOverflow.ellipsis),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(children: [
+        TextField(
+          controller: ctr[i],
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'Name ${i + 1}',
+            prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
+            suffixIcon: IconButton(
+              tooltip: 'Einlaufsong',
+              icon: Icon(Icons.music_note, size: 20, color: hasSong ? kAccent : kDim),
+              onPressed: () async {
+                final s = await pickSong(context);
+                if (s != null) setState(() => songs[i] = s);
+              },
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
           ),
         ),
-        if (songs[i] != null) IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => songs[i] = null)),
+        if (hasSong)
+          Padding(
+            padding: const EdgeInsets.only(left: 12, right: 4, top: 4),
+            child: Row(children: [
+              Icon(Icons.check_circle, color: kAccent, size: 14),
+              const SizedBox(width: 6),
+              Text('SONG BESTÄTIGT', style: TextStyle(color: kAccent, fontSize: 10, letterSpacing: 2)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => setState(() => songs[i] = null),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Text('ENTFERNEN', style: TextStyle(color: kDim, fontSize: 10, letterSpacing: 1)),
+                ),
+              ),
+            ]),
+          ),
       ]),
     );
   }
 
   Widget _names() {
     return Column(children: [
-      for (var i = 0; i < n; i++) ...[
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: TextField(
-            controller: ctr[i],
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Name ${i + 1}',
-              prefixIcon: Icon(Icons.circle, color: teamColors[i], size: 14),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-          ),
-        ),
-        if (wm) _songRow(i),
-      ],
+      for (var i = 0; i < n; i++) _nameRow(i),
     ]);
   }
 
@@ -804,7 +868,7 @@ class _SetupState extends State<SetupPage> {
       names.add(t.isEmpty ? 'Spieler ${i + 1}' : t);
     }
     final g = Game(names, wm ? 501 : start, wm ? true : dbl, wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first);
-    final songList = wm ? songs.sublist(0, 2) : const <Song?>[];
+    final songList = songs.sublist(0, n);
     Navigator.push(c, MaterialPageRoute(builder: (_) => GamePage(g, songs: songList)));
   }
 
@@ -1204,14 +1268,14 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   bool calDirty = true;
   String info = '';
   Timer? timer;
-  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
 
   @override
   void initState() {
     super.initState();
     info = calib.length < 4 ? 'Kalibrieren: tippe im Bild ${calibNames[calib.length]} am Außenrand des Doppelrings an' : '${g.names[g.cur]} antippen, um zu starten';
     g.hold = false;
-    walkLoading = g.wm && soundOn.value && widget.songs.any((s) => s != null);
+    walkLoading = soundOn.value && widget.songs.any((s) => s != null);
     if (walkLoading) _prepareWalkIns();
     timer = Timer.periodic(const Duration(milliseconds: 900), (_) => _tick());
   }
@@ -1291,6 +1355,8 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
 
   void _add(Dart d) {
     feedback();
+    final oldTons = g.tons[g.cur];
+    final oldFin = g.highFin[g.cur];
     setState(() {
       g.add(d);
       if (g.winner != null) {
@@ -1307,6 +1373,11 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         info = 'Erkannt: ${d.label}';
       }
     });
+    if (g.tons[g.cur] > oldTons) {
+      sound180();
+    } else if (g.highFin[g.cur] > oldFin) {
+      soundBigFish();
+    }
   }
 
   Future<void> _arm() async {
@@ -1552,6 +1623,56 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     );
   }
 
+  void _showStats() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('STATISTIK', style: TextStyle(letterSpacing: 3, color: kDim, fontSize: 12)),
+            const SizedBox(height: 12),
+            for (var i = 0; i < g.names.length; i++) _statCard(i),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _statCard(int i) {
+    final col = teamColors[i % teamColors.length];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: kLine, width: 1.5)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: col, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(g.names[i].toUpperCase(), style: TextStyle(color: col, letterSpacing: 2, fontSize: 12))),
+        ]),
+        const SizedBox(height: 8),
+        _statRow('Ø', g.avg(i)),
+        _statRow('DARTS', '${g.thrown[i]}'),
+        _statRow('180er', '${g.tons[i]}'),
+        _statRow('HIGH FINISH', '${g.highFin[i]}'),
+        _statRow('BESTER ZUG', g.bestTurn[i] == 0 ? '–' : '${g.bestTurn[i]}'),
+        if (g.wm) _statRow('SÄTZE / LEGS', '${g.sets[i]} / ${g.legs[i]}'),
+      ]),
+    );
+  }
+
+  Widget _statRow(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(children: [
+        Expanded(child: Text(k, style: TextStyle(color: kDim, fontSize: 11, letterSpacing: 2))),
+        Text(v, style: TextStyle(color: kInk, fontSize: 14, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
   Widget _pill2(String t, int n, Color col) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -1560,7 +1681,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit) {
+  Widget _compact(int i, Color col, bool cur, List<Dart> ds, bool canEdit, double pulseVal) {
     return Row(children: [
       Expanded(
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -1598,40 +1719,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     final canEdit = cur && g.held && !manual;
     final pulseActive = cur && g.winner == null && g.legWinner == null;
 
-    final Widget content = compact
-        ? _compact(i, col, cur, ds, canEdit)
-        : Column(children: [
-            Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
-            if (g.wm)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  _pill2('SÄTZE', g.sets[i], col),
-                  const SizedBox(width: 6),
-                  _pill2('LEGS', g.legs[i], col),
-                ]),
-              ),
-            const SizedBox(height: 4),
-            FittedBox(child: DotNum('${g.scores[i]}', kInk)),
-            Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}', style: TextStyle(fontSize: 11, color: kDim)),
-            const SizedBox(height: 8),
-            Row(children: [
-              for (var k = 0; k < 3; k++)
-                Expanded(
-                  child: GestureDetector(
-                    onTap: canEdit && k < ds.length ? () => _edit(k) : null,
-                    child: Container(
-                      height: 26,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
-                      child: k < ds.length ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk))) : null,
-                    ),
-                  ),
-                ),
-            ]),
-          ]);
-
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -1648,20 +1735,51 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         child: AnimatedBuilder(
           animation: _pulse,
           builder: (_, child) {
-            final pv = pulseActive ? (0.35 + 0.65 * _pulse.value) : 1.0;
+            // Retro-Puls: Rahmenbreite + Schatten-Offset pulsieren (kein Alpha-Fading)
+            final double borderW = cur ? (pulseActive ? 2.0 + 1.4 * _pulse.value : 2.0) : 1.5;
+            final double shadowOff = cur && pulseActive ? 3.0 + 3.0 * _pulse.value : 4.0;
             return Container(
               margin: compact ? const EdgeInsets.fromLTRB(4, 4, 8, 6) : const EdgeInsets.fromLTRB(5, 5, 9, 9),
               padding: EdgeInsets.all(compact ? 6 : 10),
               decoration: BoxDecoration(
                 color: kCard,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: cur ? col.withValues(alpha: pv) : (g.held && i == nextI ? col : kLine), width: cur ? 2 : 1.5),
-                boxShadow: cur ? [BoxShadow(color: col.withValues(alpha: 0.45 * pv), offset: const Offset(4, 4))] : null,
+                border: Border.all(color: cur ? col : (g.held && i == nextI ? col : kLine), width: borderW),
+                boxShadow: cur ? [BoxShadow(color: col, offset: Offset(shadowOff, shadowOff))] : null,
               ),
-              child: child,
+              child: compact ? _compact(i, col, cur, ds, canEdit, _pulse.value) : Column(children: [
+                Text('${g.wm && g.legStart == i ? '◆ ' : ''}${cur && armed ? '● ' : ''}${g.names[i].toUpperCase()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, letterSpacing: 2, color: col)),
+                if (g.wm)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      _pill2('SÄTZE', g.sets[i], col),
+                      const SizedBox(width: 6),
+                      _pill2('LEGS', g.legs[i], col),
+                    ]),
+                  ),
+                const SizedBox(height: 4),
+                FittedBox(child: DotNum('${g.scores[i]}', kInk)),
+                Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}', style: TextStyle(fontSize: 11, color: kDim)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  for (var k = 0; k < 3; k++)
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: canEdit && k < ds.length ? () => _edit(k) : null,
+                        child: Container(
+                          height: 26,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: canEdit && k < ds.length ? col : kLine)),
+                          child: k < ds.length ? FittedBox(child: Text(ds[k].label, style: TextStyle(fontSize: 12, color: kInk))) : null,
+                        ),
+                      ),
+                    ),
+                ]),
+              ]),
             );
           },
-          child: content,
         ),
       ),
     );
@@ -1911,8 +2029,9 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   pill(0, 'MANUELL'),
                   pill(1, 'KAMERA'),
+                  IconButton(icon: const Icon(Icons.bar_chart, size: 18), onPressed: _showStats),
                   if (!manual) ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     const Text('Auto'),
                     Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
                   ],
@@ -1928,6 +2047,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       appBar: AppBar(
         title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'),
         actions: [
+          IconButton(icon: const Icon(Icons.bar_chart), tooltip: 'Statistik', onPressed: _showStats),
           if (!manual) const Text('Auto'),
           if (!manual) Switch(value: auto, onChanged: (v) => setState(() => auto = v)),
         ],
@@ -2257,10 +2377,10 @@ class _Logo extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final u = s.width;
-    final ink = fixed ? const Color(0xFFF4F2FA) : kInk;
-    final acc = fixed ? const Color(0xFF1AE5D0) : kAccent;
-    final vio = fixed ? const Color(0xFF9A6BFF) : kViolet;
-    final pk = fixed ? const Color(0xFFFF5FA2) : teamColors[2];
+    final ink = fixed ? kInk : kInk;
+    final acc = fixed ? kAccent : kAccent;
+    final vio = fixed ? kViolet : kViolet;
+    final pk = fixed ? teamColors[2] : teamColors[2];
     for (var pass = 0; pass < 2; pass++) {
       final off = pass == 0 ? u * .035 : 0.0;
       c.save();
@@ -2293,7 +2413,8 @@ class _SplashState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer(const Duration(seconds: 4), _go);
+    // Splash effektiv 1.25s sichtbar
+    _timer = Timer(const Duration(milliseconds: 1250), _go);
   }
 
   void _go() {
@@ -2317,15 +2438,16 @@ class _SplashState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext c) {
+    // Splash passt sich an aktuelles Theme an
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _go,
       child: Scaffold(
-        backgroundColor: const Color(0xFF09080F),
+        backgroundColor: kBg,
         body: Center(
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 700),
+            duration: const Duration(milliseconds: 500),
             curve: Curves.easeOut,
             builder: (_, v, child) => Opacity(opacity: v, child: child),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -2335,17 +2457,17 @@ class _SplashState extends State<SplashPage> {
                 return LogoMark(size, fixed: true);
               }),
               const SizedBox(height: 32),
-              const FittedBox(
+              FittedBox(
                 child: Text(
                   'StanDart',
                   style: TextStyle(
                     fontSize: 56,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 3,
-                    color: Colors.white,
+                    color: kInk,
                     shadows: [
-                      Shadow(color: Color(0xFF1AE5D0), offset: Offset(4, 4)),
-                      Shadow(color: Color(0xFF9A6BFF), offset: Offset(8, 8)),
+                      Shadow(color: kAccent, offset: const Offset(4, 4)),
+                      Shadow(color: kViolet, offset: const Offset(8, 8)),
                     ],
                   ),
                 ),
@@ -2372,16 +2494,12 @@ class _Overlay extends CustomPainter {
     final thin = Paint()..color = kAccent.withValues(alpha: .7)..style = PaintingStyle.stroke..strokeWidth = 0.8;
     Offset sc(Offset o) => Offset(o.dx * s.width, o.dy * s.height);
 
-    final pulsePaint = Paint()
-      ..color = kAccent.withValues(alpha: pulseActive ? 0.35 + 0.65 * pulse : 1.0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-
+    // Kalibrier-Punkt: äußerer Puls-Ring (Retro-Look)
     for (var i = 0; i < pts.length; i++) {
       final isNext = pulseActive && i == pts.length - 1;
-      c.drawCircle(sc(pts[i]), 7, isNext ? pulsePaint : thick);
+      c.drawCircle(sc(pts[i]), 7, thick);
       if (isNext) {
-        c.drawCircle(sc(pts[i]), 12 + 6 * pulse, Paint()..color = kAccent.withValues(alpha: 0.4 * (1 - pulse))..style = PaintingStyle.stroke..strokeWidth = 2);
+        c.drawCircle(sc(pts[i]), 12 + 6 * pulse, Paint()..color = kAccent.withValues(alpha: 0.7 * (1 - pulse))..style = PaintingStyle.stroke..strokeWidth = 2.5);
       }
     }
 
