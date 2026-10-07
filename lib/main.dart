@@ -12,7 +12,6 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ----- Theme-Notifier -----
 final darkSetting = ValueNotifier<bool?>(null);
 final darkMode = ValueNotifier<bool>(true);
 final vibOn = ValueNotifier<bool>(true);
@@ -22,7 +21,6 @@ final autoFit = ValueNotifier<bool>(true);
 final checkoutOn = ValueNotifier<bool>(true);
 String diagWhy = '';
 
-// ----- Retro-Palette -----
 Color kBg = const Color(0xFF0A0910);
 Color kCard = const Color(0xFF16141F);
 Color kLine = const Color(0xFF2E2A3D);
@@ -215,12 +213,12 @@ Dart fromBoard(double dx, double dy) {
 class LifeStats {
   int games;
   int darts;
-  int tons;      // 180er
+  int tons;
   int count170;
-  int highFin;   // Finishes >= 100
+  int highFin;
   int bestTurn;
   int wins;
-  double points; // total points scored
+  double points;
   LifeStats({this.games = 0, this.darts = 0, this.tons = 0, this.count170 = 0, this.highFin = 0, this.bestTurn = 0, this.wins = 0, this.points = 0});
   String toJson() => jsonEncode({'g': games, 'd': darts, 't': tons, 'c170': count170, 'hf': highFin, 'bt': bestTurn, 'w': wins, 'p': points});
   static LifeStats from(String? s) {
@@ -272,7 +270,6 @@ Future<void> saveProfiles(List<Profile> profiles) async {
   await p.setStringList('profiles', [for (final pr in profiles) pr.toJson()]);
 }
 
-// Offline-Song-Cache: Song-ID -> Dateipfad
 Future<String> songCachePath(int id) async {
   final dir = await getApplicationDocumentsDirectory();
   return '${dir.path}/song_$id.mp3';
@@ -288,27 +285,20 @@ Future<String?> cachedSongPath(int id) async {
   return File(p).existsSync() ? p : null;
 }
 
-// ---------- Trainingsmodus-Config ----------
-enum TrainMode { bob27, aroundTheClock, shanghai, checkout121 }
-
-class TrainConfig {
-  final TrainMode mode;
-  const TrainConfig(this.mode);
-}
-
 class Game {
   final List<String> names;
   final int start;
   final bool dbl;
   final bool doubleIn;
   final bool masterOut;
-  final TrainMode? train; // wenn gesetzt -> Trainingsmodus
   late List<int> scores;
   late List<int> thrown;
   late List<List<Dart>> last;
   int cur = 0;
   int turnStart;
+  int dartsThisTurn = 0;
   bool opened = false;
+  int openIdx = -1; // Index des ersten zählenden Darts (Double-In)
   List<Dart> darts = [];
   String? winner;
   String? msg;
@@ -328,13 +318,10 @@ class Game {
   late List<int> highFin;
   late List<int> bestTurn;
   late List<int> count170;
-  // Training: aktueller Zielwert / Status je Spieler
-  late List<int> trainTarget;
-  late List<int> trainHits;
   final hist = <List<Object?>>[];
 
   Game(this.names, this.start, this.dbl,
-      {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0, this.doubleIn = false, this.masterOut = false, this.train})
+      {this.wm = false, this.setsToWin = 3, this.tieBreak = true, int first = 0, this.doubleIn = false, this.masterOut = false})
       : turnStart = start {
     cur = first;
     legStart = first;
@@ -348,19 +335,9 @@ class Game {
     highFin = List.filled(names.length, 0);
     bestTurn = List.filled(names.length, 0);
     count170 = List.filled(names.length, 0);
-    trainTarget = List.filled(names.length, _initTrain(start));
-    trainHits = List.filled(names.length, 0);
     last = List.generate(names.length, (_) => <Dart>[]);
     turnStart = scores[cur];
     opened = !doubleIn;
-  }
-
-  int _initTrain(int start) {
-    if (train == TrainMode.bob27) return 27;
-    if (train == TrainMode.aroundTheClock) return 1;
-    if (train == TrainMode.shanghai) return 1;
-    if (train == TrainMode.checkout121) return 121;
-    return start;
   }
 
   String avg(int i) {
@@ -369,7 +346,16 @@ class Game {
     return v.toStringAsFixed(1);
   }
 
-  int _sum() {
+  // Effektiver Punkte-Summe (Double-In berücksichtigt)
+  int _effSum() {
+    if (doubleIn && !opened) return 0;
+    if (doubleIn && openIdx > 0) {
+      var s = 0;
+      for (var i = openIdx; i < darts.length; i++) {
+        s += darts[i].points;
+      }
+      return s;
+    }
     var s = 0;
     for (final d in darts) {
       s += d.points;
@@ -377,41 +363,40 @@ class Game {
     return s;
   }
 
+  // Finish-Regel: 'any', 'double' oder 'master'
+  String get _finishRule {
+    if (masterOut) return 'master';
+    if (dbl) return 'double';
+    return 'any';
+  }
+
+  bool _isValidFinish(Dart d) {
+    switch (_finishRule) {
+      case 'double':
+        return d.m == 2;
+      case 'master':
+        return d.m == 2 || d.m == 3;
+      default:
+        return true;
+    }
+  }
+
   void add(Dart d) {
     if (winner != null || held || legWinner != null) return;
     _save();
     msg = null;
     thrown[cur]++;
+    dartsThisTurn++;
     darts.add(d);
 
-    // ----- Trainingsmodi -----
-    if (train == TrainMode.bob27) {
-      _bob27Add(d);
-      return;
-    }
-    if (train == TrainMode.aroundTheClock) {
-      _aroundAdd(d);
-      return;
-    }
-    if (train == TrainMode.shanghai) {
-      _shanghaiAdd(d);
-      return;
-    }
-    if (train == TrainMode.checkout121) {
-      _checkoutAdd(d);
-      return;
-    }
-
-    // ----- Standardspiel -----
-    final rem = turnStart - _sum();
-    final needOpen = doubleIn && !opened;
-    if (needOpen && d.m == 2) opened = true;
-    bool bust;
-    if (needOpen && !opened) {
-      bust = false;
-      if (darts.length == 3) {
-        final sum = _sum();
-        if (sum > bestTurn[cur]) bestTurn[cur] = sum;
+    // Double-In: Öffnung prüfen
+    if (doubleIn && !opened) {
+      if (d.m == 2) {
+        opened = true;
+        openIdx = darts.length - 1;
+      }
+      // Turn zu Ende ohne Öffnung?
+      if (dartsThisTurn == 3) {
         if (hold) {
           held = true;
         } else {
@@ -420,8 +405,11 @@ class Game {
       }
       return;
     }
-    final outOk = masterOut ? (d.m == 2 || d.m == 3) : (d.m == 2);
-    bust = rem < 0 || (dbl && rem == 1) || (rem == 0 && dbl && !outOk);
+
+    final effSum = _effSum();
+    final rem = turnStart - effSum;
+    final needFinish = _finishRule != 'any';
+    final bust = rem < 0 || (needFinish && rem == 1) || (rem == 0 && needFinish && !_isValidFinish(d));
     if (bust) {
       scores[cur] = turnStart;
       msg = 'Bust!';
@@ -444,137 +432,10 @@ class Game {
       }
       return;
     }
-    if (darts.length == 3) {
-      final sum = _sum();
+    if (dartsThisTurn == 3) {
+      final sum = _effSum();
       if (sum == 180) tons[cur]++;
       if (sum > bestTurn[cur]) bestTurn[cur] = sum;
-      if (hold) {
-        held = true;
-      } else {
-        _next();
-      }
-    }
-  }
-
-  // ---- Bob's 27 ----
-  void _bob27Add(Dart d) {
-    // Erwartet drei Darts pro Runde auf ein Doppel. Vereinfachte Logik: eine Eingabe = ein Dart.
-    if (d.m != 2) {
-      // kein Doppel getroffen
-      scores[cur] -= trainTarget[cur];
-      trainHits[cur] = 0;
-    } else {
-      // Doppel getroffen – Punkte = Doppelwert; nur wenn genau n == target
-      if (d.n == trainTarget[cur]) {
-        scores[cur] += trainTarget[cur] * 2;
-        trainHits[cur]++;
-      } else {
-        scores[cur] -= trainTarget[cur];
-        trainHits[cur] = 0;
-      }
-    }
-    if (trainHits[cur] >= 1) {
-      // nach Erfolg weiter zur nächsten Zahl
-      final nextIdx = order.indexOf(trainTarget[cur]) + 1;
-      if (nextIdx >= 20) {
-        winner = names[cur];
-        return;
-      }
-      trainTarget[cur] = order[nextIdx];
-      trainHits[cur] = 0;
-    }
-    if (scores[cur] < 0) {
-      winner = names[cur];
-      msg = 'AUS (unter 0)';
-      return;
-    }
-    if (darts.length == 3) {
-      if (hold) {
-        held = true;
-      } else {
-        _next();
-      }
-    }
-  }
-
-  // ---- Around the Clock ----
-  void _aroundAdd(Dart d) {
-    if (d.n == trainTarget[cur] && d.m >= 1) {
-      trainHits[cur]++;
-      if (trainTarget[cur] == 20) {
-        // Bull
-        if (d.n == 25) {
-          winner = names[cur];
-          return;
-        }
-        trainTarget[cur] = 25;
-      } else if (trainTarget[cur] == 25) {
-        winner = names[cur];
-        return;
-      } else {
-        trainTarget[cur]++;
-      }
-    }
-    if (darts.length == 3) {
-      if (hold) {
-        held = true;
-      } else {
-        _next();
-      }
-    }
-  }
-
-  // ---- Shanghai ----
-  void _shanghaiAdd(Dart d) {
-    if (d.n == trainTarget[cur]) {
-      trainHits[cur]++;
-      final pts = d.points;
-      scores[cur] = pts; // Überschreiben mit Punkten dieser Runde (Shanghai-Regel)
-    }
-    if (darts.length == 3) {
-      final hadTriple = darts.any((dd) => dd.n == trainTarget[cur] && dd.m == 3);
-      final hadDouble = darts.any((dd) => dd.n == trainTarget[cur] && dd.m == 2);
-      final hadSingle = darts.any((dd) => dd.n == trainTarget[cur] && dd.m == 1);
-      if (hadTriple && hadDouble && hadSingle) {
-        winner = names[cur];
-        msg = 'SHANGHAI!';
-        return;
-      }
-      if (trainTarget[cur] >= 20) {
-        winner = names[cur];
-        return;
-      }
-      trainTarget[cur]++;
-      if (hold) {
-        held = true;
-      } else {
-        _next();
-      }
-    }
-  }
-
-  // ---- 121 Checkout-Training ----
-  void _checkoutAdd(Dart d) {
-    final rem = trainTarget[cur] - _sum();
-    if (rem < 0) {
-      msg = 'Bust!';
-      trainTarget[cur] = 121;
-      if (hold) {
-        held = true;
-      } else {
-        _next();
-      }
-      return;
-    }
-    if (rem == 0 && d.m == 2) {
-      winner = names[cur];
-      return;
-    }
-    if (darts.length == 3) {
-      if (rem == 0 && d.m != 2) {
-        msg = 'Bust! Doppel fehlt';
-      }
-      trainTarget[cur] = 121;
       if (hold) {
         held = true;
       } else {
@@ -587,11 +448,10 @@ class Game {
     last[cur] = darts;
     cur = (cur + 1) % names.length;
     darts = [];
+    dartsThisTurn = 0;
     turnStart = scores[cur];
     opened = !doubleIn;
-    if (train != null && !hist.isEmpty) {
-      // nichts weiter
-    }
+    openIdx = -1;
   }
 
   void _legWon() {
@@ -626,12 +486,14 @@ class Game {
     scores = List.filled(names.length, start);
     last = List.generate(names.length, (_) => <Dart>[]);
     darts = [];
+    dartsThisTurn = 0;
     msg = null;
     held = false;
     hist.clear();
     cur = legStart;
     turnStart = start;
     opened = !doubleIn;
+    openIdx = -1;
   }
 
   void _save() {
@@ -657,8 +519,8 @@ class Game {
       List<int>.of(bestTurn),
       List<int>.of(count170),
       opened,
-      List<int>.of(trainTarget),
-      List<int>.of(trainHits),
+      openIdx,
+      dartsThisTurn,
     ]);
   }
 
@@ -704,8 +566,8 @@ class Game {
     bestTurn = h[18] as List<int>;
     count170 = h[19] as List<int>;
     opened = h[20] as bool;
-    trainTarget = h[21] as List<int>;
-    trainHits = h[22] as List<int>;
+    openIdx = h[21] as int;
+    dartsThisTurn = h[22] as int;
   }
 }
 
@@ -770,7 +632,6 @@ List<Dart>? checkout(int rem, bool dbl, int left) {
   });
 }
 
-// ---------- Einstellungen ----------
 void showSettings(BuildContext c) {
   showModalBottomSheet(
     context: c,
@@ -874,7 +735,6 @@ void showSettings(BuildContext c) {
   );
 }
 
-// ---------- Song + Profile ----------
 class Song {
   final int id;
   final String title;
@@ -1093,9 +953,6 @@ class ModePage extends StatelessWidget {
         void go(int? pts, bool wm) {
           Navigator.push(c, MaterialPageRoute(builder: (_) => SetupPage(startPts: pts, wm: wm)));
         }
-        void goTrain() {
-          Navigator.push(c, MaterialPageRoute(builder: (_) => const TrainingPage()));
-        }
         return Scaffold(
           appBar: AppBar(title: const Text('STANDART')),
           body: Padding(
@@ -1114,11 +971,6 @@ class ModePage extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 70,
-                child: tile('TRAIN', 'ÜBUNGSMODI', teamColors[4], goTrain),
-              ),
               const SizedBox(height: 16),
               Row(children: [
                 Expanded(child: smallTile(Icons.tune, 'EINSTELLUNGEN', () => showSettings(c))),
@@ -1133,7 +985,7 @@ class ModePage extends StatelessWidget {
   }
 }
 
-// ---------- Profile-Verwaltung + Lifetime-Stats ----------
+// ---------- Profile ----------
 class ProfilesPage extends StatefulWidget {
   const ProfilesPage({super.key});
   @override
@@ -1302,55 +1154,11 @@ class _ProfilesPageState extends State<ProfilesPage> {
   }
 }
 
-// ---------- Training-Auswahl ----------
-class TrainingPage extends StatelessWidget {
-  const TrainingPage({super.key});
-
-  @override
-  Widget build(BuildContext c) {
-    Widget card(String t, String sub, TrainMode m) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: GestureDetector(
-          onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => SetupPage(trainMode: m))),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: kCard,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: kLine, width: 1.5),
-              boxShadow: [BoxShadow(color: kAccent, offset: const Offset(4, 4))],
-            ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(t, style: TextStyle(color: kAccent, fontWeight: FontWeight.bold, letterSpacing: 2)),
-              const SizedBox(height: 4),
-              Text(sub, style: TextStyle(color: kDim, fontSize: 12)),
-            ]),
-          ),
-        ),
-      );
-    }
-    return Scaffold(
-      appBar: AppBar(title: const Text('TRAINING')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          card("BOB'S 27", 'Doppel von 1 bis 20 + Bull. Verpasst = Punkte abziehen.', TrainMode.bob27),
-          card('AROUND THE CLOCK', '1 bis 20 und dann Bull, in Reihenfolge.', TrainMode.aroundTheClock),
-          card('SHANGHAI', 'Ziel: S, D und T der gleichen Zahl in einer Aufnahme.', TrainMode.shanghai),
-          card('121 CHECKOUT', 'Start bei 121, auf 0 finishen mit Double-Out.', TrainMode.checkout121),
-        ],
-      ),
-    );
-  }
-}
-
 // ---------- Setup ----------
 class SetupPage extends StatefulWidget {
   final int? startPts;
   final bool wm;
-  final TrainMode? trainMode;
-  const SetupPage({super.key, this.startPts, this.wm = false, this.trainMode});
+  const SetupPage({super.key, this.startPts, this.wm = false});
   @override
   State<SetupPage> createState() => _SetupState();
 }
@@ -1371,7 +1179,6 @@ class _SetupState extends State<SetupPage> {
   List<Profile> profiles = [];
 
   int get n => wm ? 2 : players;
-  bool get isTrain => widget.trainMode != null;
 
   @override
   void initState() {
@@ -1469,11 +1276,13 @@ class _SetupState extends State<SetupPage> {
           ),
         if (profiles.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.only(top: 8),
             child: Align(
               alignment: Alignment.centerLeft,
               child: PopupMenuButton<int>(
                 tooltip: 'Profil laden',
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                color: kCard,
                 onSelected: (idx) {
                   setState(() {
                     ctr[i].text = profiles[idx].name;
@@ -1481,15 +1290,35 @@ class _SetupState extends State<SetupPage> {
                   });
                 },
                 itemBuilder: (_) => [
-                  for (var k = 0; k < profiles.length; k++) PopupMenuItem(value: k, child: Text(profiles[k].name)),
+                  for (var k = 0; k < profiles.length; k++)
+                    PopupMenuItem(
+                      value: k,
+                      child: Row(children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(color: teamColors[k % teamColors.length], shape: BoxShape.circle),
+                          child: const Icon(Icons.person, size: 14, color: Colors.black),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(profiles[k].name, overflow: TextOverflow.ellipsis)),
+                        if (profiles[k].song != null) const Icon(Icons.music_note, size: 14),
+                      ]),
+                    ),
                 ],
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: kLine)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: kViolet, width: 1.5),
+                    color: kViolet.withValues(alpha: .12),
+                  ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.person_search, size: 14, color: kDim),
-                    const SizedBox(width: 6),
-                    Text('PROFIL LADEN', style: TextStyle(color: kDim, fontSize: 10, letterSpacing: 1.5)),
+                    Icon(Icons.people_alt, size: 16, color: kViolet),
+                    const SizedBox(width: 8),
+                    Text('PROFIL LADEN', style: TextStyle(color: kViolet, fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 4),
+                    Icon(Icons.expand_more, size: 16, color: kViolet),
                   ]),
                 ),
               ),
@@ -1503,18 +1332,12 @@ class _SetupState extends State<SetupPage> {
     return Column(children: [for (var i = 0; i < n; i++) _nameRow(i)]);
   }
 
-  Future<void> _startGame(BuildContext c) async {
-    await _saveSetup();
+  void _startGame(BuildContext c) {
+    _saveSetup();
     final names = <String>[];
     for (var i = 0; i < n; i++) {
       final t = ctr[i].text.trim();
       names.add(t.isEmpty ? 'Spieler ${i + 1}' : t);
-    }
-    if (isTrain) {
-      // Training: standard 1 Spieler, Trainingsmodus
-      final g = Game(names, 501, true, train: widget.trainMode, first: 0);
-      Navigator.push(c, MaterialPageRoute(builder: (_) => GamePage(g, songs: const [])));
-      return;
     }
     final g = Game(names, wm ? 501 : start, wm ? true : dbl,
         wm: wm, setsToWin: _setsTo[round], tieBreak: round != 0, first: first,
@@ -1528,29 +1351,14 @@ class _SetupState extends State<SetupPage> {
     return ValueListenableBuilder<bool>(
       valueListenable: darkMode,
       builder: (c, _, __) {
-        final title = isTrain
-            ? 'TRAINING'
-            : wm
-                ? 'WM-MODUS'
-                : 'NEUES SPIEL';
         return Scaffold(
-          appBar: AppBar(title: Text(title)),
+          appBar: AppBar(title: Text(wm ? 'WM-MODUS' : 'NEUES SPIEL')),
           body: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(children: [
               Expanded(
                 child: ListView(children: [
-                  if (isTrain)
-                    _sec('SPIELER', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      SegmentedButton<int>(
-                        segments: const [ButtonSegment(value: 1, label: Text('1'))],
-                        selected: {1},
-                        onSelectionChanged: (_) {},
-                      ),
-                      const SizedBox(height: 12),
-                      _nameRow(0),
-                    ]))
-                  else if (!wm)
+                  if (!wm)
                     _sec('SPIELER', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       SegmentedButton<int>(
                         segments: [for (var i = 1; i <= 6; i++) ButtonSegment(value: i, label: Text('$i'))],
@@ -1562,7 +1370,7 @@ class _SetupState extends State<SetupPage> {
                     ]))
                   else
                     _sec('SPIELER', _names()),
-                  if (!wm && !isTrain) ...[
+                  if (!wm) ...[
                     _sec('SPIEL $start', Column(children: [
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -1586,7 +1394,7 @@ class _SetupState extends State<SetupPage> {
                         onChanged: (v) => setState(() => masterOut = v),
                       ),
                     ])),
-                  ] else if (wm) ...[
+                  ] else ...[
                     _sec('FORMAT', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Wrap(spacing: 8, children: [
                         for (var i = 0; i < _rounds.length; i++)
@@ -1606,7 +1414,7 @@ class _SetupState extends State<SetupPage> {
                   ],
                 ]),
               ),
-              FilledButton(onPressed: () => _startGame(c), child: Text(isTrain ? 'Training starten' : 'Spiel starten')),
+              FilledButton(onPressed: () => _startGame(c), child: const Text('Spiel starten')),
             ]),
           ),
         );
@@ -2449,11 +2257,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                             _pill2('LEGS', g.legs[i], col),
                           ]),
                         ),
-                      if (g.train != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text('ZIEL ${g.trainTarget[i]}', style: TextStyle(color: kViolet, fontSize: 11, letterSpacing: 2)),
-                        ),
                       const SizedBox(height: 4),
                       FittedBox(child: DotNum('${g.scores[i]}', kInk)),
                       Text('Ø ${g.avg(i)}${g.last[i].isNotEmpty ? '  ·  ZUG ${g.last[i].fold<int>(0, (a, d) => a + d.points)}' : ''}', style: TextStyle(fontSize: 11, color: kDim)),
@@ -2500,7 +2303,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
       onNext: () => Navigator.pushReplacement(
         c,
         MaterialPageRoute(builder: (_) => GamePage(Game(g.names, g.start, g.dbl,
-            wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak, doubleIn: g.doubleIn, masterOut: g.masterOut, train: g.train), songs: widget.songs)),
+            wm: g.wm, setsToWin: g.setsToWin, tieBreak: g.tieBreak, doubleIn: g.doubleIn, masterOut: g.masterOut), songs: widget.songs)),
       ),
       onMenu: () => Navigator.pop(c),
     );
