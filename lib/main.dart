@@ -209,50 +209,33 @@ Dart fromBoard(double dx, double dy) {
   return Dart(n, 1);
 }
 
-// ---------- Lifetime-Stats ----------
-class LifeStats {
-  int games;
-  int darts;
-  int tons;
-  int count170;
-  int highFin;
-  int bestTurn;
-  int wins;
-  double points;
-  LifeStats({this.games = 0, this.darts = 0, this.tons = 0, this.count170 = 0, this.highFin = 0, this.bestTurn = 0, this.wins = 0, this.points = 0});
-  String toJson() => jsonEncode({'g': games, 'd': darts, 't': tons, 'c170': count170, 'hf': highFin, 'bt': bestTurn, 'w': wins, 'p': points});
-  static LifeStats from(String? s) {
-    if (s == null) return LifeStats();
+class Song {
+  final int id;
+  final String title;
+  final String artist;
+  const Song(this.id, this.title, this.artist);
+  String toJson() => jsonEncode({'id': id, 't': title, 'a': artist});
+  static Song? from(String? s) {
+    if (s == null) return null;
     try {
       final m = jsonDecode(s) as Map;
-      return LifeStats(
-        games: (m['g'] ?? 0) as int,
-        darts: (m['d'] ?? 0) as int,
-        tons: (m['t'] ?? 0) as int,
-        count170: (m['c170'] ?? 0) as int,
-        highFin: (m['hf'] ?? 0) as int,
-        bestTurn: (m['bt'] ?? 0) as int,
-        wins: (m['w'] ?? 0) as int,
-        points: ((m['p'] ?? 0) as num).toDouble(),
-      );
+      return Song(m['id'] as int, '${m['t']}', '${m['a']}');
     } catch (_) {
-      return LifeStats();
+      return null;
     }
   }
 }
 
-// ---------- Spielerprofil ----------
 class Profile {
   final String name;
   final Song? song;
-  final LifeStats stats;
-  Profile(this.name, this.song, [LifeStats? stats]) : stats = stats ?? LifeStats();
-  String toJson() => jsonEncode({'n': name, 's': song?.toJson(), 'st': stats.toJson()});
+  Profile(this.name, this.song);
+  String toJson() => jsonEncode({'n': name, 's': song?.toJson()});
   static Profile? from(String? s) {
     if (s == null) return null;
     try {
       final m = jsonDecode(s) as Map;
-      return Profile('${m['n']}', Song.from(m['s'] as String?), LifeStats.from(m['st'] as String?));
+      return Profile('${m['n']}', Song.from(m['s'] as String?));
     } catch (_) {
       return null;
     }
@@ -298,7 +281,7 @@ class Game {
   int turnStart;
   int dartsThisTurn = 0;
   bool opened = false;
-  int openIdx = -1; // Index des ersten zählenden Darts (Double-In)
+  int openIdx = -1;
   List<Dart> darts = [];
   String? winner;
   String? msg;
@@ -346,7 +329,6 @@ class Game {
     return v.toStringAsFixed(1);
   }
 
-  // Effektiver Punkte-Summe (Double-In berücksichtigt)
   int _effSum() {
     if (doubleIn && !opened) return 0;
     if (doubleIn && openIdx > 0) {
@@ -363,7 +345,6 @@ class Game {
     return s;
   }
 
-  // Finish-Regel: 'any', 'double' oder 'master'
   String get _finishRule {
     if (masterOut) return 'master';
     if (dbl) return 'double';
@@ -389,13 +370,11 @@ class Game {
     dartsThisTurn++;
     darts.add(d);
 
-    // Double-In: Öffnung prüfen
     if (doubleIn && !opened) {
       if (d.m == 2) {
         opened = true;
         openIdx = darts.length - 1;
       }
-      // Turn zu Ende ohne Öffnung?
       if (dartsThisTurn == 3) {
         if (hold) {
           held = true;
@@ -735,23 +714,6 @@ void showSettings(BuildContext c) {
   );
 }
 
-class Song {
-  final int id;
-  final String title;
-  final String artist;
-  const Song(this.id, this.title, this.artist);
-  String toJson() => jsonEncode({'id': id, 't': title, 'a': artist});
-  static Song? from(String? s) {
-    if (s == null) return null;
-    try {
-      final m = jsonDecode(s) as Map;
-      return Song(m['id'] as int, '${m['t']}', '${m['a']}');
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
 Future<dynamic> deezerJson(String url) async {
   final h = HttpClient();
   try {
@@ -900,7 +862,6 @@ class _SongPickerState extends State<SongPickerPage> {
   }
 }
 
-// ---------- Modus-Auswahl ----------
 class ModePage extends StatelessWidget {
   const ModePage({super.key});
 
@@ -924,7 +885,7 @@ class ModePage extends StatelessWidget {
     );
   }
 
-  Widget smallTile(IconData i, String label, VoidCallback f, {Color? accent}) {
+  Widget smallTile(Widget icon, String label, VoidCallback f, {Color? accent}) {
     final col = accent ?? kAccent;
     return GestureDetector(
       onTap: f,
@@ -937,8 +898,8 @@ class ModePage extends StatelessWidget {
           boxShadow: [BoxShadow(color: col, offset: const Offset(3, 3))],
         ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(i, color: col, size: 22),
-          const SizedBox(height: 4),
+          icon,
+          const SizedBox(height: 6),
           Text(label, style: TextStyle(color: col, fontSize: 10, letterSpacing: 1.5)),
         ]),
       ),
@@ -973,9 +934,13 @@ class ModePage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Row(children: [
-                Expanded(child: smallTile(Icons.tune, 'EINSTELLUNGEN', () => showSettings(c))),
+                Expanded(child: smallTile(Icon(Icons.tune, color: kAccent, size: 22), 'EINSTELLUNGEN', () => showSettings(c))),
                 const SizedBox(width: 12),
-                Expanded(child: smallTile(Icons.people, 'PROFILE', () => Navigator.push(c, MaterialPageRoute(builder: (_) => const ProfilesPage())), accent: kViolet)),
+                Expanded(
+                    child: smallTile(
+                        const PixelPerson(size: 22, color: Colors.black), 'PROFILE',
+                        () => Navigator.push(c, MaterialPageRoute(builder: (_) => const ProfilesPage())),
+                        accent: kViolet)),
               ]),
             ]),
           ),
@@ -985,7 +950,6 @@ class ModePage extends StatelessWidget {
   }
 }
 
-// ---------- Profile ----------
 class ProfilesPage extends StatefulWidget {
   const ProfilesPage({super.key});
   @override
@@ -1055,42 +1019,6 @@ class _ProfilesPageState extends State<ProfilesPage> {
     setState(() {});
   }
 
-  void _showStats(int i) {
-    final p = profiles[i];
-    final s = p.stats;
-    final avg = s.darts == 0 ? '–' : (s.points / s.darts * 3).toStringAsFixed(1);
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('LIFETIME – ${p.name.toUpperCase()}', style: TextStyle(letterSpacing: 2, color: kDim, fontSize: 12)),
-            const SizedBox(height: 10),
-            _row('SPIELE', '${s.games}'),
-            _row('SIEGE', '${s.wins}'),
-            _row('Ø (LIFETIME)', avg),
-            _row('DARTS GESAMT', '${s.darts}'),
-            _row('180er', '${s.tons}'),
-            _row('170er', '${s.count170}'),
-            _row('HIGH FINISHES', '${s.highFin}'),
-            _row('BESTER ZUG', s.bestTurn == 0 ? '–' : '${s.bestTurn}'),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        Expanded(child: Text(k, style: TextStyle(color: kDim, fontSize: 11, letterSpacing: 2))),
-        Text(v, style: TextStyle(color: kInk, fontSize: 14, fontWeight: FontWeight.bold)),
-      ]),
-    );
-  }
-
   Future<void> _updateCacheAll() async {
     int done = 0;
     for (final p in profiles) {
@@ -1131,7 +1059,14 @@ class _ProfilesPageState extends State<ProfilesPage> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: kLine, width: 1.5)),
                     child: Row(children: [
-                      Icon(Icons.person, color: teamColors[i % teamColors.length]),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: teamColors[i % teamColors.length],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const PixelPerson(size: 20, color: Colors.black),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1140,7 +1075,6 @@ class _ProfilesPageState extends State<ProfilesPage> {
                           Text(profiles[i].song == null ? 'kein Song' : '♪ Song hinterlegt', style: TextStyle(color: kDim, fontSize: 11)),
                         ]),
                       ),
-                      IconButton(icon: const Icon(Icons.bar_chart), tooltip: 'Lifetime-Stats', onPressed: () => _showStats(i)),
                       IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _delete(i)),
                     ]),
                   ),
@@ -1154,7 +1088,6 @@ class _ProfilesPageState extends State<ProfilesPage> {
   }
 }
 
-// ---------- Setup ----------
 class SetupPage extends StatefulWidget {
   final int? startPts;
   final bool wm;
@@ -1295,10 +1228,9 @@ class _SetupState extends State<SetupPage> {
                       value: k,
                       child: Row(children: [
                         Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(color: teamColors[k % teamColors.length], shape: BoxShape.circle),
-                          child: const Icon(Icons.person, size: 14, color: Colors.black),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: teamColors[k % teamColors.length], borderRadius: BorderRadius.circular(6)),
+                          child: const PixelPerson(size: 16, color: Colors.black),
                         ),
                         const SizedBox(width: 10),
                         Expanded(child: Text(profiles[k].name, overflow: TextOverflow.ellipsis)),
@@ -1310,15 +1242,15 @@ class _SetupState extends State<SetupPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: kViolet, width: 1.5),
-                    color: kViolet.withValues(alpha: .12),
+                    border: Border.all(color: kAccent, width: 1.5),
+                    color: kAccent.withValues(alpha: .12),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.people_alt, size: 16, color: kViolet),
+                    Icon(Icons.people_alt, size: 16, color: kAccent),
                     const SizedBox(width: 8),
-                    Text('PROFIL LADEN', style: TextStyle(color: kViolet, fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+                    Text('PROFIL LADEN', style: TextStyle(color: kAccent, fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 4),
-                    Icon(Icons.expand_more, size: 16, color: kViolet),
+                    Icon(Icons.expand_more, size: 16, color: kAccent),
                   ]),
                 ),
               ),
@@ -1423,7 +1355,6 @@ class _SetupState extends State<SetupPage> {
   }
 }
 
-// ---------- Kalibrierung / Perspektive ----------
 List<Offset> calib = [];
 final boardPts = [for (final a in [9, 99, 189, 279]) Offset(sin(a * pi / 180), -cos(a * pi / 180))];
 const calibNames = ['20|1 (oben)', '6|10 (rechts)', '3|19 (unten)', '11|14 (links)'];
@@ -1720,7 +1651,6 @@ Det? detect(img.Image a, img.Image b) {
   return Det(fromBoard(bp.dx, bp.dy), tip, bp, pts.length, [for (var i = 0; i < pts.length; i += max(1, pts.length ~/ 300)) pts[i]]);
 }
 
-// ---------- Spielseite ----------
 class GamePage extends StatefulWidget {
   final Game g;
   final List<Song?> songs;
@@ -2120,57 +2050,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     );
   }
 
-  void _showStats() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('STATISTIK', style: TextStyle(letterSpacing: 3, color: kDim, fontSize: 12)),
-            const SizedBox(height: 12),
-            for (var i = 0; i < g.names.length; i++) _statCard(i),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _statCard(int i) {
-    final col = teamColors[i % teamColors.length];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: kLine, width: 1.5)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: col, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(g.names[i].toUpperCase(), style: TextStyle(color: col, letterSpacing: 2, fontSize: 12))),
-        ]),
-        const SizedBox(height: 8),
-        _statRow('Ø', g.avg(i)),
-        _statRow('DARTS', '${g.thrown[i]}'),
-        _statRow('180er', '${g.tons[i]}'),
-        _statRow('170er', '${g.count170[i]}'),
-        _statRow('HIGH FINISH', '${g.highFin[i]}'),
-        _statRow('BESTER ZUG', g.bestTurn[i] == 0 ? '–' : '${g.bestTurn[i]}'),
-        if (g.wm) _statRow('SÄTZE / LEGS', '${g.sets[i]} / ${g.legs[i]}'),
-      ]),
-    );
-  }
-
-  Widget _statRow(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(children: [
-        Expanded(child: Text(k, style: TextStyle(color: kDim, fontSize: 11, letterSpacing: 2))),
-        Text(v, style: TextStyle(color: kInk, fontSize: 14, fontWeight: FontWeight.bold)),
-      ]),
-    );
-  }
-
   Widget _pill2(String t, int n, Color col) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -2533,7 +2412,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   pill(0, 'MANUELL'),
                   pill(1, 'KAMERA'),
-                  IconButton(icon: const Icon(Icons.bar_chart, size: 18), onPressed: _showStats),
                 ]),
                 Expanded(child: pager),
               ]),
@@ -2545,9 +2423,6 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     return Scaffold(
       appBar: AppBar(
         title: Text('DRAN: ${g.names[g.cur].toUpperCase()}'),
-        actions: [
-          IconButton(icon: const Icon(Icons.bar_chart), tooltip: 'Statistik', onPressed: _showStats),
-        ],
       ),
       body: Column(children: [
         SizedBox(
@@ -2896,6 +2771,44 @@ class _Logo extends CustomPainter {
 
   @override
   bool shouldRepaint(_) => true;
+}
+
+/// Pixel-Art Person als Retro-Avatar.
+class PixelPerson extends StatelessWidget {
+  final double size;
+  final Color color;
+  const PixelPerson({super.key, this.size = 24, this.color = Colors.black});
+  @override
+  Widget build(BuildContext c) => CustomPaint(size: Size(size, size), painter: _PixelPerson(color));
+}
+
+class _PixelPerson extends CustomPainter {
+  final Color color;
+  _PixelPerson(this.color);
+  static const _grid = [
+    '00000000',
+    '00111100',
+    '01111110',
+    '01111110',
+    '00111100',
+    '01111110',
+    '11111111',
+    '11000011',
+  ];
+  @override
+  void paint(Canvas c, Size s) {
+    final u = s.width / 8;
+    final p = Paint()..color = color;
+    for (var y = 0; y < 8; y++) {
+      for (var x = 0; x < 8; x++) {
+        if (_grid[y][x] == '1') {
+          c.drawRect(Rect.fromLTWH(x * u, y * u, u, u), p);
+        }
+      }
+    }
+  }
+  @override
+  bool shouldRepaint(_) => false;
 }
 
 class SplashPage extends StatefulWidget {
