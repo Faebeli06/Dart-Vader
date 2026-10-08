@@ -938,7 +938,7 @@ class ModePage extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                     child: smallTile(
-                        const PixelPerson(size: 22, color: Colors.black), 'PROFILE',
+                        PixelPerson(size: 22, color: kViolet), 'PROFILE',
                         () => Navigator.push(c, MaterialPageRoute(builder: (_) => const ProfilesPage())),
                         accent: kViolet)),
               ]),
@@ -977,13 +977,37 @@ class _ProfilesPageState extends State<ProfilesPage> {
   }
 
   Future<void> _add() async {
-    final nameC = TextEditingController();
-    Song? song;
+    final result = await _editDialog();
+    if (result != null) {
+      profiles.add(Profile(result.$1, result.$2));
+      await saveProfiles(profiles);
+      setState(() {});
+    }
+  }
+
+  Future<void> _edit(int i) async {
+    final result = await _editDialog(
+      initialName: profiles[i].name,
+      initialSong: profiles[i].song,
+    );
+    if (result != null) {
+      profiles[i] = Profile(result.$1, result.$2);
+      await saveProfiles(profiles);
+      setState(() {});
+    }
+  }
+
+  /// Öffnet einen Dialog zum Erstellen/Bearbeiten eines Profils.
+  /// Gibt (Name, Song) zurück oder null, wenn abgebrochen.
+  Future<(String, Song?)?> _editDialog({String? initialName, Song? initialSong}) async {
+    final nameC = TextEditingController(text: initialName ?? '');
+    Song? song = initialSong;
+    final isEdit = initialName != null;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
-          title: const Text('NEUES PROFIL'),
+          title: Text(isEdit ? 'PROFIL BEARBEITEN' : 'NEUES PROFIL'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Name')),
             const SizedBox(height: 10),
@@ -998,6 +1022,15 @@ class _ProfilesPageState extends State<ProfilesPage> {
               icon: Icon(song == null ? Icons.music_note : Icons.check_circle, color: song == null ? kAccent : teamColors[2], size: 24),
               label: Text(song == null ? 'SONG WÄHLEN' : 'SONG BESTÄTIGT'),
             ),
+            if (song != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: TextButton.icon(
+                  onPressed: () => set(() => song = null),
+                  icon: const Icon(Icons.close, size: 14, color: Colors.grey),
+                  label: const Text('SONG ENTFERNEN', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                ),
+              ),
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('ABBRECHEN')),
@@ -1007,10 +1040,9 @@ class _ProfilesPageState extends State<ProfilesPage> {
       ),
     );
     if (ok == true && nameC.text.trim().isNotEmpty) {
-      profiles.add(Profile(nameC.text.trim(), song));
-      await saveProfiles(profiles);
-      setState(() {});
+      return (nameC.text.trim(), song);
     }
+    return null;
   }
 
   Future<void> _delete(int i) async {
@@ -1075,7 +1107,8 @@ class _ProfilesPageState extends State<ProfilesPage> {
                           Text(profiles[i].song == null ? 'kein Song' : '♪ Song hinterlegt', style: TextStyle(color: kDim, fontSize: 11)),
                         ]),
                       ),
-                      IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _delete(i)),
+                      IconButton(icon: const Icon(Icons.edit_outlined), tooltip: 'Bearbeiten', onPressed: () => _edit(i)),
+                      IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Löschen', onPressed: () => _delete(i)),
                     ]),
                   ),
                 const SizedBox(height: 10),
@@ -2785,15 +2818,16 @@ class PixelPerson extends StatelessWidget {
 class _PixelPerson extends CustomPainter {
   final Color color;
   _PixelPerson(this.color);
+  // Kopf + Schultern, klarere Silhouette
   static const _grid = [
-    '00000000',
     '00111100',
     '01111110',
     '01111110',
+    '01111110',
+    '00111100',
     '00111100',
     '01111110',
     '11111111',
-    '11000011',
   ];
   @override
   void paint(Canvas c, Size s) {
