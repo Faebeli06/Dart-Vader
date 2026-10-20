@@ -1,5 +1,5 @@
 name: dart_counter
-description: Dart Zähler mit Kameraerkennung
+description: Dart Zähler
 publish_to: none
 version: 0.1.0
 environment:
@@ -7,11 +7,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  camera: ^0.11.0
-  image: ^4.2.0
   shared_preferences: ^2.2.0
   audioplayers: ^6.1.0
-  path_provider: ^2.1.4    # ← NEU
+  path_provider: ^2.1.4
 flutter:
   uses-material-design: true
   assets:
