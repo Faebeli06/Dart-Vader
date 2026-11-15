@@ -233,6 +233,14 @@ class Song {
   }
 }
 
+class _TrackHit {
+  final int id;
+  final String title;
+  final String artist;
+  final String preview;
+  const _TrackHit(this.id, this.title, this.artist, this.preview);
+}
+
 class Profile {
   final String name;
   final Song? song;
@@ -727,7 +735,7 @@ class SongPickerPage extends StatefulWidget {
 class _SongPickerState extends State<SongPickerPage> {
   final q = TextEditingController();
   final ap = AudioPlayer();
-  List> res = [];
+  List<_TrackHit> res = [];
   bool busy = false;
   String? err;
   int? playing;
@@ -772,10 +780,21 @@ class _SongPickerState extends State<SongPickerPage> {
     });
     try {
       final j = await deezerJson('https://api.deezer.com/search?q=${Uri.encodeQueryComponent(t)}&limit=20');
-      final list = >[];
+      final list = <_TrackHit>[];
       final data = j['data'] as List? ?? [];
       for (final e in data) {
-        if (e is Map<String, dynamic> && '${e['preview'] ?? ''}'.isNotEmpty) list.add(e);
+        if (e is Map) {
+          final preview = '${e['preview'] ?? ''}';
+          if (preview.isNotEmpty && e['id'] is int) {
+            final artistMap = e['artist'] as Map?;
+            list.add(_TrackHit(
+              e['id'] as int,
+              '${e['title'] ?? ''}',
+              '${artistMap?['name'] ?? ''}',
+              preview,
+            ));
+          }
+        }
       }
       if (mounted) {
         setState(() {
@@ -823,24 +842,24 @@ class _SongPickerState extends State<SongPickerPage> {
             child: ListView(children: [
               for (final e in res)
                 ListTile(
-                  title: Text('${e['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('${(e['artist'] as Map?)?['name'] ?? ''}', maxLines: 1),
+                  title: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(e.artist, maxLines: 1),
                   trailing: IconButton(
-                    icon: Icon(playing == e['id'] ? Icons.stop : Icons.play_arrow),
+                    icon: Icon(playing == e.id ? Icons.stop : Icons.play_arrow),
                     onPressed: () async {
-                      if (playing == e['id']) {
+                      if (playing == e.id) {
                         await ap.stop();
                         setState(() => playing = null);
                         return;
                       }
-                      setState(() => playing = e['id'] as int);
+                      setState(() => playing = e.id);
                       try {
-                        await ap.play(UrlSource('${e['preview']}'));
+                        await ap.play(UrlSource(e.preview));
                       } catch (_) {}
                     },
                   ),
                   onTap: () {
-                    Navigator.pop(c, Song(e['id'] as int, '${e['title']}', '${(e['artist'] as Map?)?['name'] ?? ''}'));
+                    Navigator.pop(c, Song(e.id, e.title, e.artist));
                   },
                 ),
             ]),
@@ -1468,7 +1487,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
   List<int> walk = [];
   int walkIdx = 0;
   bool walkLoading = false;
-  final walkUrls = <int, String>{};
+  final Map<int, String> walkUrls = {};
   int? editPlayer;
   int? editSlot;
   late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
