@@ -32,15 +32,18 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.VIBRATE"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<application#' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="StanDart"/' android/app/src/main/AndroidManifest.xml
 
-      - name: Direkte Vibration aktivieren
+- name: Direkte Vibration aktivieren
         run: |
-          MAIN_KT=$(find android/app/src/main/kotlin -name "MainActivity.kt" | head -n 1)
-          PKG=$(head -n 1 "$MAIN_KT")
+          MAIN_KT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
+          test -n "$MAIN_KT"
+          PKG=$(head -n 1 "$MAIN_KT" | tr -d '\r')
           cat << 'EOF' > "$MAIN_KT"
           PACKAGE_PLACEHOLDER
 
           import android.content.Context
+          import android.media.AudioAttributes
           import android.os.Build
+          import android.os.VibrationAttributes
           import android.os.VibrationEffect
           import android.os.Vibrator
           import android.os.VibratorManager
@@ -54,15 +57,24 @@ jobs:
                   MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ch.staehli.standart/haptic")
                       .setMethodCallHandler { call, result ->
                           if (call.method == "vibrate") {
-                              val ms = (call.argument<Int>("ms") ?: 28).toLong()
+                              val ms = (call.argument<Int>("ms") ?: 40).toLong().coerceAtLeast(40L)
                               val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                   (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
                               } else {
                                   @Suppress("DEPRECATION")
                                   getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
                               }
-                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                  vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                  val attrs = VibrationAttributes.Builder()
+                                      .setUsage(VibrationAttributes.USAGE_ALARM)
+                                      .build()
+                                  vibrator.vibrate(VibrationEffect.createOneShot(ms, 255), attrs)
+                              } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                  @Suppress("DEPRECATION")
+                                  val attrs = AudioAttributes.Builder()
+                                      .setUsage(AudioAttributes.USAGE_ALARM)
+                                      .build()
+                                  vibrator.vibrate(VibrationEffect.createOneShot(ms, 255), attrs)
                               } else {
                                   @Suppress("DEPRECATION")
                                   vibrator.vibrate(ms)
@@ -76,7 +88,6 @@ jobs:
           }
           EOF
           sed -i "s|PACKAGE_PLACEHOLDER|$PKG|" "$MAIN_KT"
-
       - name: Android-Startbild ohne rundes Icon
         run: |
           R=android/app/src/main/res
