@@ -15,6 +15,8 @@ final vibOn = ValueNotifier<bool>(true);
 final soundOn = ValueNotifier<bool>(true);
 final checkoutOn = ValueNotifier<bool>(true);
 
+const _hapticChannel = MethodChannel('ch.staehli.standart/haptic');
+
 Color kBg = const Color(0xFF0A0910);
 Color kCard = const Color(0xFF16141F);
 Color kLine = const Color(0xFF2E2A3D);
@@ -70,22 +72,47 @@ void applyTheme(bool d) {
   }
 }
 
+class _DotPage extends StatelessWidget {
+  final Widget child;
+  const _DotPage({required this.child});
+  @override
+  Widget build(BuildContext c) {
+    return ColoredBox(
+      color: kBg,
+      child: CustomPaint(painter: _Dots(), child: child),
+    );
+  }
+}
+
 Route<T> fadeRoute<T>(Widget page, {int ms = 180}) {
   return PageRouteBuilder<T>(
-    pageBuilder: (_, __, ___) => page,
-    transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
+    opaque: true,
+    pageBuilder: (_, __, ___) => _DotPage(child: page),
+    transitionsBuilder: (_, a, __, child) => FadeTransition(
+      opacity: CurvedAnimation(parent: a, curve: Curves.easeOut),
+      child: child,
+    ),
     transitionDuration: Duration(milliseconds: ms),
     reverseTransitionDuration: Duration(milliseconds: ms),
   );
 }
 
+Future<void> _vibratePulse([int ms = 28]) async {
+  if (!vibOn.value) return;
+  try {
+    await _hapticChannel.invokeMethod('vibrate', {'ms': ms});
+  } catch (_) {
+    await HapticFeedback.vibrate();
+  }
+}
+
 void feedback() {
-  if (vibOn.value) HapticFeedback.mediumImpact();
+  _vibratePulse(28);
   if (soundOn.value) SystemSound.play(SystemSoundType.click);
 }
 
 void tapTick() {
-  if (vibOn.value) HapticFeedback.selectionClick();
+  _vibratePulse(18);
 }
 
 Future<void> sound180() async {
@@ -195,7 +222,7 @@ class _StanDartAppState extends State<StanDartApp> with WidgetsBindingObserver {
         return MaterialApp(
           title: 'StanDart',
           debugShowCheckedModeBanner: false,
-          builder: (c, child) => Container(color: kBg, child: CustomPaint(painter: _Dots(), child: child)),
+          color: kBg,
           theme: appTheme(d),
           home: const SplashPage(),
         );
@@ -672,10 +699,11 @@ void showSettings(BuildContext c) {
               ),
               SwitchListTile(
                 title: const Text('Vibration'),
+                subtitle: const Text('Bestätigung beim Eingeben der Punkte'),
                 value: vibOn.value,
                 onChanged: (v) async {
                   vibOn.value = v;
-                  if (v) HapticFeedback.mediumImpact();
+                  if (v) _vibratePulse(28);
                   set(() {});
                   final p = await SharedPreferences.getInstance();
                   await p.setBool('vib', v);
@@ -816,7 +844,6 @@ class _SongPickerState extends State<SongPickerPage> {
   @override
   Widget build(BuildContext c) {
     return Scaffold(
-      backgroundColor: kBg,
       resizeToAvoidBottomInset: false,
       appBar: AppBar(title: const Text('EINLAUFSONG')),
       body: SafeArea(
@@ -2431,37 +2458,38 @@ class _SplashState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext c) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _go,
-      child: Scaffold(
-        backgroundColor: kBg,
-        body: Center(
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (_, v, child) => Opacity(opacity: v, child: child),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              LayoutBuilder(builder: (_, cons) {
-                final shortest = MediaQuery.of(c).size.shortestSide;
-                final size = (shortest * 0.42).clamp(90.0, 200.0);
-                return LogoMark(size, fixed: true);
-              }),
-              const SizedBox(height: 32),
-              FittedBox(
-                child: Text(
-                  'StanDart',
-                  style: TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 3,
-                    color: kInk,
-                    shadows: [Shadow(color: kAccent, offset: const Offset(4, 4)), Shadow(color: kViolet, offset: const Offset(8, 8))],
+    return _DotPage(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _go,
+        child: Scaffold(
+          body: Center(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOut,
+              builder: (_, v, child) => Opacity(opacity: v, child: child),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                LayoutBuilder(builder: (_, cons) {
+                  final shortest = MediaQuery.of(c).size.shortestSide;
+                  final size = (shortest * 0.42).clamp(90.0, 200.0);
+                  return LogoMark(size, fixed: true);
+                }),
+                const SizedBox(height: 32),
+                FittedBox(
+                  child: Text(
+                    'StanDart',
+                    style: TextStyle(
+                      fontSize: 56,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                      color: kInk,
+                      shadows: [Shadow(color: kAccent, offset: const Offset(4, 4)), Shadow(color: kViolet, offset: const Offset(8, 8))],
+                    ),
                   ),
                 ),
-              ),
-            ]),
+              ]),
+            ),
           ),
         ),
       ),
