@@ -94,6 +94,11 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "FEHLER: Secret KEYSTORE_PASSWORD fehlt in GitHub Settings!"
+            exit 1
+          fi
+
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
           else
@@ -116,63 +121,35 @@ jobs:
           storeFile=../upload-keystore.jks
           EOF
 
-          cat << 'EOF' > android/app/build.gradle.kts
-          import java.util.Properties
-          import java.io.FileInputStream
-
-          plugins {
-              id("com.android.application")
-              id("kotlin-android")
-              id("dev.flutter.flutter-gradle-plugin")
-          }
-
-          val keystoreProperties = Properties()
-          val keystorePropertiesFile = rootProject.file("key.properties")
-          if (keystorePropertiesFile.exists()) {
-              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-          }
-
-          android {
-              namespace = "ch.staehli.standart"
-              compileSdk = flutter.compileSdkVersion
-              ndkVersion = flutter.ndkVersion
-
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-
-              kotlinOptions {
-                  jvmTarget = JavaVersion.VERSION_17.toString()
-              }
-
-              defaultConfig {
-                  applicationId = "ch.staehli.standart"
-                  minSdk = flutter.minSdkVersion
-                  targetSdk = flutter.targetSdkVersion
-                  versionCode = flutter.versionCode
-                  versionName = flutter.versionName
-              }
-
-              signingConfigs {
-                  create("release") {
-                      keyAlias = keystoreProperties.getProperty("keyAlias")
-                      keyPassword = keystoreProperties.getProperty("keyPassword")
-                      storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
-                      storePassword = keystoreProperties.getProperty("storePassword")
-                  }
-              }
-
-              buildTypes {
-                  release {
-                      signingConfig = signingConfigs.getByName("release")
-                  }
-              }
-          }
-
-          flutter {
-              source = "../.."
-          }
+          python3 - <<'EOF'
+          import re
+          p = "android/app/build.gradle.kts"
+          s = open(p).read()
+          header = (
+              'import java.util.Properties\n'
+              'import java.io.FileInputStream\n\n'
+              'val keystoreProperties = Properties()\n'
+              'val keystorePropertiesFile = rootProject.file("key.properties")\n'
+              'if (keystorePropertiesFile.exists()) {\n'
+              '    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n'
+              '}\n\n'
+          )
+          signing = (
+              '    signingConfigs {\n'
+              '        create("release") {\n'
+              '            keyAlias = keystoreProperties.getProperty("keyAlias")\n'
+              '            keyPassword = keystoreProperties.getProperty("keyPassword")\n'
+              '            storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }\n'
+              '            storePassword = keystoreProperties.getProperty("storePassword")\n'
+              '        }\n'
+              '    }\n\n'
+              '    buildTypes {'
+          )
+          s, n1 = re.subn(r'[ \t]*buildTypes\s*\{', signing, s, count=1)
+          assert n1 == 1, "buildTypes nicht gefunden"
+          s, n2 = re.subn(r'signingConfigs\.getByName\("debug"\)', 'signingConfigs.getByName("release")', s, count=1)
+          assert n2 == 1, "debug signingConfig nicht gefunden"
+          open(p, "w").write(header + s)
           EOF
 
       - name: Android-Startbild ohne rundes Icon
