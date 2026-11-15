@@ -1,21 +1,27 @@
 name: Build APK
+
 on:
   push:
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+
       - name: Projekt erzeugen
         run: |
           cp lib/main.dart /tmp/main.dart
@@ -23,8 +29,54 @@ jobs:
           flutter create . --platforms=android --project-name dart_counter
           cp /tmp/main.dart lib/main.dart
           cp /tmp/pubspec.yaml pubspec.yaml
-          sed -i 's#<application#<uses-permission android:name="android.permission.CAMERA"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<application#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.VIBRATE"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<application#' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="StanDart"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Direkte Vibration aktivieren
+        run: |
+          MAIN_KT=$(find android/app/src/main/kotlin -name "MainActivity.kt" | head -n 1)
+          PKG=$(head -n 1 "$MAIN_KT")
+          cat << 'EOF' > "$MAIN_KT"
+          PACKAGE_PLACEHOLDER
+
+          import android.content.Context
+          import android.os.Build
+          import android.os.VibrationEffect
+          import android.os.Vibrator
+          import android.os.VibratorManager
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ch.staehli.standart/haptic")
+                      .setMethodCallHandler { call, result ->
+                          if (call.method == "vibrate") {
+                              val ms = (call.argument<Int>("ms") ?: 28).toLong()
+                              val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                  (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                              } else {
+                                  @Suppress("DEPRECATION")
+                                  getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                              }
+                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                  vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                              } else {
+                                  @Suppress("DEPRECATION")
+                                  vibrator.vibrate(ms)
+                              }
+                              result.success(null)
+                          } else {
+                              result.notImplemented()
+                          }
+                      }
+              }
+          }
+          EOF
+          sed -i "s|PACKAGE_PLACEHOLDER|$PKG|" "$MAIN_KT"
+
       - name: Android-Startbild ohne rundes Icon
         run: |
           R=android/app/src/main/res
@@ -61,6 +113,7 @@ jobs:
           EOF
             fi
           done
+
       - name: Icon erzeugen (Pfeil)
         run: |
           python3 -m pip install --break-system-packages pillow
@@ -85,12 +138,14 @@ jobs:
               poly([(.08, 0), (.2, .16), (.44, .16), (.34, 0)], c((255, 95, 162)), off)
           im.save('icon.png')
           EOF
+
       - run: flutter pub get
       - run: flutter pub add --dev flutter_launcher_icons
       - run: |
           printf 'flutter_launcher_icons:\n  android: true\n  ios: false\n  image_path: "icon.png"\n' > flutter_launcher_icons.yaml
           dart run flutter_launcher_icons
       - run: flutter build apk --release
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
