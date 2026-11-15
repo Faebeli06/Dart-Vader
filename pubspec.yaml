@@ -1,15 +1,18 @@
-name: dart_counter
-description: Dart Zähler
+name: StanDart
+description: StanDart - Dart Zähler
 publish_to: none
-version: 0.1.0
+version: 1.0.0+1
+
 environment:
   sdk: '>=3.0.0 <4.0.0'
+
 dependencies:
   flutter:
     sdk: flutter
   shared_preferences: ^2.2.0
   audioplayers: ^6.1.0
   path_provider: ^2.1.4
+
 flutter:
   uses-material-design: true
   assets:
