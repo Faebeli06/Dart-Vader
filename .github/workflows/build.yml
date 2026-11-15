@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK & Play Store AAB
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
         run: |
           cp lib/main.dart /tmp/main.dart
           cp pubspec.yaml /tmp/pubspec.yaml
-          flutter create . --platforms=android --project-name dart_counter
+          flutter create . --platforms=android --org ch.staehli --project-name standart
           cp /tmp/main.dart lib/main.dart
           cp /tmp/pubspec.yaml pubspec.yaml
           sed -i 's#<application#<uses-permission android:name="android.permission.VIBRATE"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<application#' android/app/src/main/AndroidManifest.xml
@@ -89,6 +89,92 @@ jobs:
           EOF
           sed -i "s|PACKAGE_PLACEHOLDER|$PKG|" "$MAIN_KT"
 
+      - name: Play-Store-Signatur einrichten
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          else
+            keytool -genkey -v \
+              -keystore android/upload-keystore.jks \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias upload \
+              -storepass "$KEYSTORE_PASSWORD" \
+              -keypass "$KEYSTORE_PASSWORD" \
+              -dname "CN=StanDart, O=Staehli, C=CH"
+            mkdir -p keystore-backup
+            cp android/upload-keystore.jks keystore-backup/upload-keystore.jks
+            base64 -w 0 android/upload-keystore.jks > keystore-backup/KEYSTORE_BASE64.txt
+          fi
+
+          cat << EOF > android/key.properties
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEYSTORE_PASSWORD
+          keyAlias=upload
+          storeFile=../upload-keystore.jks
+          EOF
+
+          cat << 'EOF' > android/app/build.gradle.kts
+          import java.util.Properties
+          import java.io.FileInputStream
+
+          plugins {
+              id("com.android.application")
+              id("kotlin-android")
+              id("dev.flutter.flutter-gradle-plugin")
+          }
+
+          val keystoreProperties = Properties()
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+          }
+
+          android {
+              namespace = "ch.staehli.standart"
+              compileSdk = flutter.compileSdkVersion
+              ndkVersion = flutter.ndkVersion
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = JavaVersion.VERSION_17.toString()
+              }
+
+              defaultConfig {
+                  applicationId = "ch.staehli.standart"
+                  minSdk = flutter.minSdkVersion
+                  targetSdk = flutter.targetSdkVersion
+                  versionCode = flutter.versionCode
+                  versionName = flutter.versionName
+              }
+
+              signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties.getProperty("keyAlias")
+                      keyPassword = keystoreProperties.getProperty("keyPassword")
+                      storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+                      storePassword = keystoreProperties.getProperty("storePassword")
+                  }
+              }
+
+              buildTypes {
+                  release {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+          }
+
+          flutter {
+              source = "../.."
+          }
+          EOF
+
       - name: Android-Startbild ohne rundes Icon
         run: |
           R=android/app/src/main/res
@@ -126,11 +212,11 @@ jobs:
             fi
           done
 
-      - name: Icon erzeugen (Pfeil)
+      - name: Icon & Play-Store-Grafiken erzeugen
         run: |
           python3 -m pip install --break-system-packages pillow
           python3 - <<'EOF'
-          from PIL import Image, ImageDraw
+          from PIL import Image, ImageDraw, ImageFont
           import math
           S = 1024
           im = Image.new('RGB', (S, S), (9, 8, 15))
@@ -149,6 +235,19 @@ jobs:
               poly([(.08, 0), (.2, -.16), (.44, -.16), (.34, 0)], c((154, 107, 255)), off)
               poly([(.08, 0), (.2, .16), (.44, .16), (.34, 0)], c((255, 95, 162)), off)
           im.save('icon.png')
+          im.resize((512, 512), Image.Resampling.LANCZOS).save('playstore-icon-512.png')
+
+          W, H = 1024, 500
+          banner = Image.new('RGB', (W, H), (9, 8, 15))
+          bd = ImageDraw.Draw(banner)
+          for y in range(16, H, 24):
+              for x in range(16, W, 24):
+                  bd.ellipse((x - 2, y - 2, x + 2, y + 2), fill=(35, 32, 48))
+          banner.paste(im.resize((280, 280), Image.Resampling.LANCZOS), (90, 110))
+          font = ImageFont.load_default(size=96)
+          bd.text((415, 198), "StanDart", font=font, fill=(0, 229, 200))
+          bd.text((410, 193), "StanDart", font=font, fill=(244, 242, 250))
+          banner.save('playstore-banner-1024x500.png')
           EOF
 
       - run: flutter pub get
@@ -157,8 +256,20 @@ jobs:
           printf 'flutter_launcher_icons:\n  android: true\n  ios: false\n  image_path: "icon.png"\n' > flutter_launcher_icons.yaml
           dart run flutter_launcher_icons
       - run: flutter build apk --release
+      - run: flutter build appbundle --release
+
+      - name: Keystore-Backup speichern (nur beim 1. Lauf)
+        if: hashFiles('keystore-backup/KEYSTORE_BASE64.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Keystore-BACKUP-WICHTIG
+          path: keystore-backup/
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+            playstore-icon-512.png
+            playstore-banner-1024x500.png
