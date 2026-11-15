@@ -32,7 +32,7 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.VIBRATE"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<application#' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="StanDart"/' android/app/src/main/AndroidManifest.xml
 
-- name: Direkte Vibration aktivieren
+      - name: Direkte Vibration aktivieren
         run: |
           MAIN_KT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
           test -n "$MAIN_KT"
@@ -88,6 +88,7 @@ jobs:
           }
           EOF
           sed -i "s|PACKAGE_PLACEHOLDER|$PKG|" "$MAIN_KT"
+
       - name: Android-Startbild ohne rundes Icon
         run: |
           R=android/app/src/main/res
