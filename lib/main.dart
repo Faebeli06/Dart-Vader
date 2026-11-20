@@ -13,6 +13,7 @@ final darkSetting = ValueNotifier<bool?>(null);
 final darkMode = ValueNotifier<bool>(true);
 final vibOn = ValueNotifier<bool>(true);
 final soundOn = ValueNotifier<bool>(true);
+final voiceOn = ValueNotifier<bool>(false);
 final checkoutOn = ValueNotifier<bool>(true);
 
 const _hapticChannel = MethodChannel('ch.staehli.standart/haptic');
@@ -106,6 +107,13 @@ Future<void> _vibratePulse([int ms = 28]) async {
   }
 }
 
+Future<void> speakScore(String text) async {
+  if (!voiceOn.value || text.isEmpty) return;
+  try {
+    await _hapticChannel.invokeMethod('speak', {'text': text});
+  } catch (_) {}
+}
+
 void feedback() {
   _vibratePulse(28);
   if (soundOn.value) SystemSound.play(SystemSoundType.click);
@@ -174,6 +182,7 @@ Future<void> main() async {
   darkSetting.value = dv == null ? null : dv == 1;
   vibOn.value = p.getBool('vib') ?? true;
   soundOn.value = p.getBool('snd') ?? true;
+  voiceOn.value = p.getBool('voice') ?? false;
   checkoutOn.value = p.getBool('co') ?? true;
   runApp(const StanDartApp());
 }
@@ -330,6 +339,7 @@ class Game {
   List<Dart> darts = [];
   String? winner;
   String? msg;
+  String? lastAnnouncement;
   final bool wm;
   final bool tieBreak;
   final int setsToWin;
@@ -417,6 +427,7 @@ class Game {
     if (winner != null || legWinner != null) return;
     _save();
     msg = null;
+    lastAnnouncement = null;
     thrown[cur]++;
     dartsThisTurn++;
     darts.add(d);
@@ -427,6 +438,7 @@ class Game {
         openIdx = darts.length - 1;
       }
       if (dartsThisTurn == 3) {
+        lastAnnouncement = '0';
         _next();
       }
       return;
@@ -439,12 +451,14 @@ class Game {
     if (bust) {
       scores[cur] = turnStart;
       msg = 'Bust!';
+      lastAnnouncement = 'Bust';
       _next();
       return;
     }
     scores[cur] = rem;
     if (rem == 0) {
       final finish = turnStart;
+      lastAnnouncement = '$finish, Check';
       if (finish >= 100) highFin[cur]++;
       if (finish == 170) count170[cur]++;
       if (wm) {
@@ -456,6 +470,7 @@ class Game {
     }
     if (dartsThisTurn == 3) {
       final sum = _effSum();
+      lastAnnouncement = '$sum';
       if (sum == 180) tons[cur]++;
       if (sum > bestTurn[cur]) bestTurn[cur] = sum;
       _next();
@@ -506,6 +521,7 @@ class Game {
     darts = [];
     dartsThisTurn = 0;
     msg = null;
+    lastAnnouncement = null;
     hist.clear();
     cur = legStart;
     turnStart = start;
@@ -580,6 +596,7 @@ class Game {
     darts = h[5] as List<Dart>;
     winner = h[6] as String?;
     msg = h[7] as String?;
+    lastAnnouncement = null;
     legs = h[8] as List<int>;
     sets = h[9] as List<int>;
     done = h[10] as List<int>;
@@ -717,6 +734,18 @@ void showSettings(BuildContext c) {
                   set(() {});
                   final p = await SharedPreferences.getInstance();
                   await p.setBool('snd', v);
+                },
+              ),
+              SwitchListTile(
+                title: const Text('Punkte ansagen'),
+                subtitle: const Text('Sprachausgabe nach 3 Darts'),
+                value: voiceOn.value,
+                onChanged: (v) async {
+                  voiceOn.value = v;
+                  if (v) speakScore('Bereit');
+                  set(() {});
+                  final p = await SharedPreferences.getInstance();
+                  await p.setBool('voice', v);
                 },
               ),
               SwitchListTile(
@@ -1587,6 +1616,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
         editPlayer = null;
         editSlot = null;
       });
+      if (g.lastAnnouncement != null) speakScore(g.lastAnnouncement!);
       _playHighlightSounds(ep, oldTons, oldFin, old170);
       return;
     }
@@ -1598,6 +1628,7 @@ class _GameState extends State<GamePage> with TickerProviderStateMixin {
     setState(() {
       g.add(d);
     });
+    if (g.lastAnnouncement != null) speakScore(g.lastAnnouncement!);
     _playHighlightSounds(targetPlayer, oldTons, oldFin, old170);
   }
 
