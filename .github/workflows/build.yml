@@ -29,10 +29,10 @@ jobs:
           flutter create . --platforms=android --org ch.staehli --project-name standart
           cp /tmp/main.dart lib/main.dart
           cp /tmp/pubspec.yaml pubspec.yaml
-          sed -i 's#<application#<uses-permission android:name="android.permission.VIBRATE"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<application#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.VIBRATE"/>\n<uses-permission android:name="android.permission.INTERNET"/>\n<queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>\n<application#' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="StanDart"/' android/app/src/main/AndroidManifest.xml
 
-      - name: Direkte Vibration aktivieren
+      - name: Direkte Vibration & Sprachausgabe aktivieren
         run: |
           MAIN_KT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
           test -n "$MAIN_KT"
@@ -47,43 +47,73 @@ jobs:
           import android.os.VibrationEffect
           import android.os.Vibrator
           import android.os.VibratorManager
+          import android.speech.tts.TextToSpeech
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
+          import java.util.Locale
 
           class MainActivity : FlutterActivity() {
+              private var tts: TextToSpeech? = null
+              private var ttsReady = false
+
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                   super.configureFlutterEngine(flutterEngine)
+                  tts = TextToSpeech(this) { status ->
+                      if (status == TextToSpeech.SUCCESS) {
+                          val res = tts?.setLanguage(Locale.GERMAN)
+                          if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                              tts?.language = Locale.getDefault()
+                          }
+                          tts?.setSpeechRate(1.05f)
+                          ttsReady = true
+                      }
+                  }
+
                   MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ch.staehli.standart/haptic")
                       .setMethodCallHandler { call, result ->
-                          if (call.method == "vibrate") {
-                              val ms = (call.argument<Int>("ms") ?: 40).toLong().coerceAtLeast(40L)
-                              val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                  (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-                              } else {
-                                  @Suppress("DEPRECATION")
-                                  getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                          when (call.method) {
+                              "vibrate" -> {
+                                  val ms = (call.argument<Int>("ms") ?: 40).toLong().coerceAtLeast(40L)
+                                  val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                      (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                  } else {
+                                      @Suppress("DEPRECATION")
+                                      getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                  }
+                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                      val attrs = VibrationAttributes.Builder()
+                                          .setUsage(VibrationAttributes.USAGE_ALARM)
+                                          .build()
+                                      vibrator.vibrate(VibrationEffect.createOneShot(ms, 255), attrs)
+                                  } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                      @Suppress("DEPRECATION")
+                                      val attrs = AudioAttributes.Builder()
+                                          .setUsage(AudioAttributes.USAGE_ALARM)
+                                          .build()
+                                      vibrator.vibrate(VibrationEffect.createOneShot(ms, 255), attrs)
+                                  } else {
+                                      @Suppress("DEPRECATION")
+                                      vibrator.vibrate(ms)
+                                  }
+                                  result.success(null)
                               }
-                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                  val attrs = VibrationAttributes.Builder()
-                                      .setUsage(VibrationAttributes.USAGE_ALARM)
-                                      .build()
-                                  vibrator.vibrate(VibrationEffect.createOneShot(ms, 255), attrs)
-                              } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                  @Suppress("DEPRECATION")
-                                  val attrs = AudioAttributes.Builder()
-                                      .setUsage(AudioAttributes.USAGE_ALARM)
-                                      .build()
-                                  vibrator.vibrate(VibrationEffect.createOneShot(ms, 255), attrs)
-                              } else {
-                                  @Suppress("DEPRECATION")
-                                  vibrator.vibrate(ms)
+                              "speak" -> {
+                                  val text = call.argument<String>("text") ?: ""
+                                  if (ttsReady && text.isNotEmpty()) {
+                                      tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "standart_score")
+                                  }
+                                  result.success(null)
                               }
-                              result.success(null)
-                          } else {
-                              result.notImplemented()
+                              else -> result.notImplemented()
                           }
                       }
+              }
+
+              override fun onDestroy() {
+                  tts?.stop()
+                  tts?.shutdown()
+                  super.onDestroy()
               }
           }
           EOF
